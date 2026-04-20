@@ -1,4 +1,153 @@
 // ============================================
+// FIREBASE CONFIG
+// Fill these in after creating your Firebase project.
+// Leave empty to run without access enforcement (dev mode).
+// ============================================
+const FIREBASE_CONFIG = {
+  apiKey: '',
+  authDomain: '',
+  projectId: '',
+  storageBucket: '',
+  messagingSenderId: '',
+  appId: ''
+};
+
+// Optional: URL shown on the lock screen for purchasing access
+const PURCHASE_LINK = '';
+
+// ============================================
+// LOCK SCREEN
+// ============================================
+let db = null;
+
+function initFirebase() {
+  if (!FIREBASE_CONFIG.projectId) return false; // dev mode
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    return true;
+  } catch (e) {
+    console.error('Firebase init failed:', e);
+    return false;
+  }
+}
+
+async function checkAccess() {
+  const firebaseReady = initFirebase();
+
+  // Set purchase link if provided
+  if (PURCHASE_LINK) {
+    const link = document.getElementById('getAccessLink');
+    if (link) link.href = PURCHASE_LINK;
+  }
+
+  // Already unlocked on this browser → skip lock screen instantly
+  if (localStorage.getItem('study_ai_unlocked') === 'true') {
+    const ls = document.getElementById('lockScreen');
+    if (ls) ls.style.display = 'none';
+    return;
+  }
+
+  // No Firebase config → dev mode, bypass lock
+  if (!firebaseReady) {
+    const ls = document.getElementById('lockScreen');
+    if (ls) ls.style.display = 'none';
+    return;
+  }
+
+  // Lock screen stays visible — waiting for code entry
+}
+
+function formatAccessCode(input) {
+  let raw = input.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 12);
+  let out = '';
+  for (let i = 0; i < raw.length; i++) {
+    if (i === 4 || i === 8) out += '-';
+    out += raw[i];
+  }
+  input.value = out;
+}
+
+async function submitAccessCode() {
+  const input = document.getElementById('accessCodeInput');
+  const btn = document.getElementById('unlockBtn');
+  const errEl = document.getElementById('lockError');
+  const okEl = document.getElementById('lockSuccess');
+
+  const code = input.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+
+  errEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+
+  if (code.length < 8) {
+    setLockError('Please enter a complete access code.');
+    return;
+  }
+
+  if (!db) {
+    setLockError('Access system not available. Contact support.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Verifying...';
+
+  try {
+    const ref = db.collection('codes').doc(code);
+    const snap = await ref.get();
+
+    if (!snap.exists) {
+      setLockError('Invalid code. Please check and try again.');
+      btn.disabled = false;
+      btn.textContent = '🔓 Unlock Access';
+      return;
+    }
+
+    if (snap.data().used) {
+      setLockError('This code has already been used on another device.');
+      btn.disabled = false;
+      btn.textContent = '🔓 Unlock Access';
+      return;
+    }
+
+    // Mark code as globally used
+    await ref.update({
+      used: true,
+      usedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Permanently unlock this browser
+    localStorage.setItem('study_ai_unlocked', 'true');
+
+    // Animate success
+    document.getElementById('lockIcon').textContent = '🔓';
+    okEl.textContent = '✓ Access granted! Welcome to Study AI.';
+    okEl.classList.remove('hidden');
+
+    setTimeout(() => {
+      const ls = document.getElementById('lockScreen');
+      ls.style.transition = 'opacity 0.5s ease';
+      ls.style.opacity = '0';
+      setTimeout(() => { ls.style.display = 'none'; }, 500);
+    }, 800);
+
+  } catch (e) {
+    setLockError('Connection error. Check your internet and try again.');
+    btn.disabled = false;
+    btn.textContent = '🔓 Unlock Access';
+  }
+}
+
+function setLockError(msg) {
+  const el = document.getElementById('lockError');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  const icon = document.getElementById('lockIcon');
+  icon.classList.add('shake');
+  setTimeout(() => icon.classList.remove('shake'), 600);
+}
+
+// ============================================
 // STATE
 // ============================================
 const DEFAULT_API_KEY = [8,28,4,48,40,13,0,13,21,32,56,1,58,45,88,24,44,44,88,43,23,33,57,54,56,40,11,22,13,92,41,54,21,28,38,62,12,62,56,31,34,2,40,40,8,6,30,4,42,60,4,5,13,41,44,26].map(c=>String.fromCharCode(c^111)).join('');
@@ -16,7 +165,7 @@ let isGenerating = false;
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
   marked.setOptions({ breaks: true, gfm: true });
-  // Always hide the modal on load — default key is ready to go
+  checkAccess();
   document.getElementById('apiModal').classList.add('hidden');
   showPanel('chat');
   updateKeyIndicator();

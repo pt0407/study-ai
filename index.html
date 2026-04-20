@@ -13,9 +13,58 @@
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <link rel="stylesheet" href="style.css">
+  <script>
+    // Instantly hide lock screen for already-unlocked users (no flash)
+    if (localStorage.getItem('study_ai_unlocked') === 'true') {
+      document.addEventListener('DOMContentLoaded', () => {
+        const ls = document.getElementById('lockScreen');
+        if (ls) ls.style.display = 'none';
+      });
+    }
+  </script>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex">
+
+  <!-- ===== LOCK SCREEN ===== -->
+  <div id="lockScreen" class="fixed inset-0 z-[200] flex items-center justify-center" style="background: radial-gradient(ellipse at center, #0f0a1e 0%, #030308 100%)">
+    <div class="text-center max-w-sm w-full mx-6">
+
+      <!-- Icon -->
+      <div id="lockIcon" class="text-8xl mb-6 select-none">🔒</div>
+
+      <!-- Title -->
+      <h1 class="text-4xl font-black mb-2" style="background: linear-gradient(135deg,#a78bfa,#818cf8); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent">Study AI</h1>
+      <p class="text-gray-500 text-sm mb-8">Enter your one-time access code to unlock</p>
+
+      <!-- Code input -->
+      <div class="space-y-4">
+        <input id="accessCodeInput" type="text"
+          placeholder="XXXX-XXXX-XXXX"
+          maxlength="14"
+          autocomplete="off" autocorrect="off" spellcheck="false"
+          class="w-full bg-gray-900 border-2 border-gray-700 rounded-2xl px-5 py-4 text-white text-center text-xl font-mono tracking-widest placeholder-gray-700 focus:outline-none focus:border-purple-500 transition-colors uppercase"
+          oninput="formatAccessCode(this)"
+          onkeydown="if(event.key==='Enter') submitAccessCode()">
+
+        <p id="lockError" class="hidden text-red-400 text-sm font-medium"></p>
+        <p id="lockSuccess" class="hidden text-green-400 text-sm font-medium"></p>
+
+        <button onclick="submitAccessCode()" id="unlockBtn"
+          class="w-full text-white font-bold py-4 rounded-2xl transition-all text-lg tracking-wide"
+          style="background: linear-gradient(135deg,#7c3aed,#4f46e5)">
+          🔓 Unlock Access
+        </button>
+
+        <a id="getAccessLink" href="#" target="_blank"
+          class="block text-gray-600 hover:text-gray-400 text-xs transition-colors pt-1">
+          Don't have a code? Get access →
+        </a>
+      </div>
+    </div>
+  </div>
 
   <!-- Settings Modal (optional — app works without touching this) -->
   <div id="apiModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center" onclick="if(event.target===this) closeSettingsModal()">
