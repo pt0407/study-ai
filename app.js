@@ -313,6 +313,36 @@ async function adminGenerateCodes() {
   btn.textContent = 'Generate & Upload';
 }
 
+function encodeApiKey(raw) {
+  const key = (raw || '').trim();
+  const out = document.getElementById('encodedKeyOutput');
+  const txt = document.getElementById('encodedKeyText');
+  const valid = document.getElementById('encodedKeyValid');
+
+  if (!key) { out.classList.add('hidden'); return; }
+
+  const encoded = key.split('').map(c => c.charCodeAt(0) ^ 111).join(',');
+  const line = '[' + encoded + '].map(c=>String.fromCharCode(c^111)).join(\'\')';
+
+  txt.textContent = line;
+  out.classList.remove('hidden');
+
+  if (key.startsWith('gsk_')) {
+    valid.textContent = '✓ Valid Groq key format';
+    valid.className = 'text-xs text-green-400';
+  } else {
+    valid.textContent = '⚠️ Key should start with gsk_ — double-check it';
+    valid.className = 'text-xs text-yellow-400';
+  }
+}
+
+let _lastEncodedKey = '';
+function adminCopyKey() {
+  const txt = document.getElementById('encodedKeyText').textContent;
+  navigator.clipboard.writeText(txt)
+    .then(() => showToast('Encoded key copied!', 'success'));
+}
+
 function adminCopyCodes() {
   navigator.clipboard.writeText(adminCodes.join('\n'))
     .then(() => showToast('Codes copied to clipboard!', 'success'));

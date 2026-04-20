@@ -537,6 +537,34 @@
       <!-- Firebase status -->
       <div id="adminFbStatus" class="bg-gray-900 border border-gray-700 rounded-2xl p-4 text-sm"></div>
 
+      <!-- API Key Encoder -->
+      <div class="bg-gray-900 border border-purple-800/50 rounded-2xl p-6 space-y-4">
+        <div>
+          <h2 class="text-lg font-semibold text-white">🔐 API Key Encoder</h2>
+          <p class="text-gray-500 text-sm">Friend gives you their Groq key → paste it here → copy the encoded line into <code class="text-purple-400 bg-gray-800 px-1 rounded">app.js</code></p>
+        </div>
+        <div class="flex gap-3">
+          <input id="rawKeyInput" type="text" placeholder="gsk_..."
+            class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 font-mono text-sm focus:outline-none focus:border-purple-500"
+            oninput="encodeApiKey(this.value)">
+          <button onclick="encodeApiKey(document.getElementById('rawKeyInput').value)"
+            class="bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-xl text-sm font-semibold transition-colors flex-shrink-0">
+            Encode
+          </button>
+        </div>
+        <div id="encodedKeyOutput" class="hidden space-y-3">
+          <p class="text-xs text-gray-500 uppercase tracking-wide font-medium">Add this line to <code class="text-purple-400">DEFAULT_API_KEYS</code> in app.js:</p>
+          <div class="relative">
+            <div id="encodedKeyText" class="bg-gray-800 rounded-xl px-4 py-3 font-mono text-xs text-green-400 break-all leading-relaxed"></div>
+            <button onclick="adminCopyKey()"
+              class="absolute top-2 right-2 bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-1.5 rounded-lg text-xs transition-colors">
+              📋 Copy
+            </button>
+          </div>
+          <p id="encodedKeyValid" class="text-xs"></p>
+        </div>
+      </div>
+
       <!-- Generate codes -->
       <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 space-y-4">
         <h2 class="text-lg font-semibold text-white">Generate &amp; Upload Codes</h2>
