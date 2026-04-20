@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Study AI — Powered by Groq</title>
+  <link id="favicon" rel="icon" href="">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -31,11 +32,37 @@
       </div>
 
       <div class="bg-green-900/20 border border-green-800/50 rounded-xl p-4 mb-5">
-        <p class="text-green-400 text-sm font-medium mb-1">✓ Default key is active</p>
-        <p class="text-gray-400 text-xs leading-relaxed">The app works out of the box. Optionally use your own free key from <a href="https://console.groq.com/keys" target="_blank" class="text-purple-400 hover:text-purple-300 underline">console.groq.com</a> for your own private rate limits.</p>
+        <p class="text-green-400 text-sm font-medium mb-1">✓ Default key is active — no setup needed</p>
+        <p class="text-gray-400 text-xs leading-relaxed">Use your own free key for private rate limits.</p>
       </div>
 
-      <div class="space-y-4">
+      <!-- How to get a key -->
+      <details class="mb-4 group">
+        <summary class="cursor-pointer text-sm text-purple-400 hover:text-purple-300 font-medium select-none list-none flex items-center gap-2">
+          <span class="transition-transform group-open:rotate-90 inline-block">▶</span>
+          How to get a free Groq API key
+        </summary>
+        <div class="mt-3 space-y-2 pl-4 border-l border-gray-700">
+          <div class="flex gap-3 items-start">
+            <span class="bg-purple-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+            <p class="text-gray-400 text-xs leading-relaxed">Go to <a href="https://console.groq.com" target="_blank" class="text-purple-400 underline">console.groq.com</a> and sign up (free, no credit card)</p>
+          </div>
+          <div class="flex gap-3 items-start">
+            <span class="bg-purple-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+            <p class="text-gray-400 text-xs leading-relaxed">Click <strong class="text-gray-300">API Keys</strong> in the left sidebar</p>
+          </div>
+          <div class="flex gap-3 items-start">
+            <span class="bg-purple-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+            <p class="text-gray-400 text-xs leading-relaxed">Click <strong class="text-gray-300">Create API Key</strong>, give it any name</p>
+          </div>
+          <div class="flex gap-3 items-start">
+            <span class="bg-purple-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
+            <p class="text-gray-400 text-xs leading-relaxed">Copy the key (starts with <code class="bg-gray-800 px-1 rounded text-purple-300">gsk_</code>) and paste it below</p>
+          </div>
+        </div>
+      </details>
+
+      <div class="space-y-3">
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-2">Your Groq API Key (optional)</label>
           <input id="apiKeyInput" type="password" placeholder="gsk_ ... paste your key here"
@@ -99,6 +126,20 @@
           <option value="deepseek-r1-distill-llama-70b">DeepSeek R1 70B</option>
           <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
           <option value="gemma2-9b-it">Gemma 2 9B</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs text-gray-500 mb-1 block font-medium uppercase tracking-wider">🎭 Tab Cloak</label>
+        <select id="tabCloakSelect" onchange="applyTabCloak(this.value)"
+          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
+          <option value="none">None (Study AI)</option>
+          <option value="google">Google</option>
+          <option value="classroom">Google Classroom</option>
+          <option value="docs">Google Docs</option>
+          <option value="sheets">Google Sheets</option>
+          <option value="khan">Khan Academy</option>
+          <option value="wikipedia">Wikipedia</option>
+          <option value="desmos">Desmos</option>
         </select>
       </div>
       <button onclick="changeApiKey()"

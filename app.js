@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('apiModal').classList.add('hidden');
   showPanel('chat');
   updateKeyIndicator();
+  initTabCloak();
 });
 
 // ============================================
@@ -69,6 +70,35 @@ function updateKeyIndicator() {
   el.className = isCustom
     ? 'text-xs text-green-400 font-medium'
     : 'text-xs text-gray-500 font-medium';
+}
+
+// ============================================
+// TAB CLOAK
+// ============================================
+const CLOAKS = {
+  none:      { title: 'Study AI \u2014 Powered by Groq',      icon: '' },
+  google:    { title: 'Google',                              icon: 'https://www.google.com/favicon.ico' },
+  classroom: { title: 'Home \u00b7 Google Classroom',        icon: 'https://ssl.gstatic.com/classroom/favicon.png' },
+  docs:      { title: 'Untitled document \u2014 Google Docs', icon: 'https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico' },
+  sheets:    { title: 'Untitled spreadsheet \u2014 Google Sheets', icon: 'https://ssl.gstatic.com/docs/spreadsheets/favicon3.ico' },
+  khan:      { title: 'Khan Academy',                        icon: 'https://cdn.kastatic.org/favicon.ico' },
+  wikipedia: { title: 'Wikipedia',                           icon: 'https://en.wikipedia.org/favicon.ico' },
+  desmos:    { title: 'Desmos | Graphing Calculator',        icon: 'https://www.desmos.com/favicon.ico' },
+};
+
+function applyTabCloak(value) {
+  const cloak = CLOAKS[value] || CLOAKS.none;
+  document.title = cloak.title;
+  const favicon = document.getElementById('favicon');
+  if (favicon) favicon.href = cloak.icon;
+  localStorage.setItem('tab_cloak', value);
+  const sel = document.getElementById('tabCloakSelect');
+  if (sel) sel.value = value;
+}
+
+function initTabCloak() {
+  const saved = localStorage.getItem('tab_cloak') || 'none';
+  applyTabCloak(saved);
 }
 
 // ============================================
