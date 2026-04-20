@@ -485,6 +485,7 @@ async function adminRemoveKey(index) {
 // ============================================
 const CLOAKS = {
   none:      { title: 'Study AI \u2014 Powered by Groq',      icon: '' },
+  blank:     { title: '',                                    icon: '' },
   google:    { title: 'Google',                              icon: 'https://www.google.com/favicon.ico' },
   classroom: { title: 'Home \u00b7 Google Classroom',        icon: 'https://ssl.gstatic.com/classroom/favicon.png' },
   docs:      { title: 'Untitled document \u2014 Google Docs', icon: 'https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico' },
@@ -495,13 +496,27 @@ const CLOAKS = {
 };
 
 function applyTabCloak(value) {
+  localStorage.setItem('tab_cloak', value);
+  const sel = document.getElementById('tabCloakSelect');
+  if (sel) sel.value = value;
+
+  if (value === 'blank') {
+    const w = window.open('about:blank', '_blank');
+    if (w) {
+      w.document.write(
+        '<!DOCTYPE html><html><head><title></title></head><body style="margin:0;padding:0;overflow:hidden;">' +
+        '<iframe src="' + location.href.split('?')[0] + '" style="width:100vw;height:100vh;border:none;"></iframe>' +
+        '</body></html>'
+      );
+      w.document.close();
+    }
+    return;
+  }
+
   const cloak = CLOAKS[value] || CLOAKS.none;
   document.title = cloak.title;
   const favicon = document.getElementById('favicon');
   if (favicon) favicon.href = cloak.icon;
-  localStorage.setItem('tab_cloak', value);
-  const sel = document.getElementById('tabCloakSelect');
-  if (sel) sel.value = value;
 }
 
 function initTabCloak() {
