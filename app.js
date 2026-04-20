@@ -4,12 +4,12 @@
 // Leave empty to run without access enforcement (dev mode).
 // ============================================
 const FIREBASE_CONFIG = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: ''
+  apiKey: 'AIzaSyCDxN4ZMtXkSP6Sm2jue4xlpuT0Hc7zzpo',
+  authDomain: 'jaggieplatobackend.firebaseapp.com',
+  projectId: 'jaggieplatobackend',
+  storageBucket: 'jaggieplatobackend.firebasestorage.app',
+  messagingSenderId: '978388681927',
+  appId: '1:978388681927:web:b5ee926b51b83fa6092ae2'
 };
 
 // Optional: URL shown on the lock screen for purchasing access
