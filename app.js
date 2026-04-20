@@ -150,8 +150,22 @@ function setLockError(msg) {
 // ============================================
 // STATE
 // ============================================
-const DEFAULT_API_KEY = [8,28,4,48,40,13,0,13,21,32,56,1,58,45,88,24,44,44,88,43,23,33,57,54,56,40,11,22,13,92,41,54,21,28,38,62,12,62,56,31,34,2,40,40,8,6,30,4,42,60,4,5,13,41,44,26].map(c=>String.fromCharCode(c^111)).join('');
-let apiKey = localStorage.getItem('groq_api_key') || DEFAULT_API_KEY;
+// Add more Groq API keys here for higher throughput (rotate on rate limit).
+// Each free account at console.groq.com gives you one key.
+const DEFAULT_API_KEYS = [
+  [8,28,4,48,40,13,0,13,21,32,56,1,58,45,88,24,44,44,88,43,23,33,57,54,56,40,11,22,13,92,41,54,21,28,38,62,12,62,56,31,34,2,40,40,8,6,30,4,42,60,4,5,13,41,44,26].map(c=>String.fromCharCode(c^111)).join(''),
+  // Paste more encoded keys here — see README for encoding instructions
+];
+let defaultKeyIndex = 0;
+let apiKey = localStorage.getItem('groq_api_key') || '';
+
+function getApiKey() {
+  return apiKey || DEFAULT_API_KEYS[defaultKeyIndex % DEFAULT_API_KEYS.length];
+}
+
+function rotateDefaultKey() {
+  defaultKeyIndex = (defaultKeyIndex + 1) % DEFAULT_API_KEYS.length;
+}
 let chatHistory = [];
 let flashcards = [];
 let currentFlashcardIndex = 0;
@@ -194,7 +208,7 @@ function saveApiKey() {
 }
 
 function useDefaultKey() {
-  apiKey = DEFAULT_API_KEY;
+  apiKey = '';
   localStorage.removeItem('groq_api_key');
   document.getElementById('apiKeyInput').value = '';
   document.getElementById('apiModal').classList.add('hidden');
@@ -380,8 +394,9 @@ function showPanel(name) {
 // ============================================
 // GROQ API (with streaming)
 // ============================================
-async function callGroq(messages, onChunk = null) {
-  if (!apiKey) {
+async function callGroq(messages, onChunk = null, _attempt = 0) {
+  const activeKey = getApiKey();
+  if (!activeKey) {
     showToast('Please add your API key first', 'error');
     throw new Error('No API key');
   }
@@ -392,17 +407,31 @@ async function callGroq(messages, onChunk = null) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': 'Bearer ' + apiKey,
+      'Authorization': 'Bearer ' + activeKey,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       model,
       messages,
       stream: streaming,
-      max_tokens: 8192,
+      max_tokens: 4096,
       temperature: 0.7
     })
   });
+
+  if (response.status === 429) {
+    const usingCustomKey = !!apiKey;
+    if (!usingCustomKey && _attempt < DEFAULT_API_KEYS.length * 2) {
+      rotateDefaultKey();
+      if (DEFAULT_API_KEYS.length > 1) showToast('Rotating API key…', 'info');
+      await new Promise(r => setTimeout(r, 1200));
+      return callGroq(messages, onChunk, _attempt + 1);
+    }
+    const retryAfter = response.headers.get('retry-after') || 10;
+    showToast('Rate limit hit — retrying in ' + retryAfter + 's…', 'info');
+    await new Promise(r => setTimeout(r, retryAfter * 1000));
+    return callGroq(messages, onChunk, _attempt + 1);
+  }
 
   if (!response.ok) {
     let errMsg = 'API request failed';
