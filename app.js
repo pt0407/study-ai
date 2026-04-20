@@ -56,6 +56,7 @@ async function checkAccess() {
   }
 
   // Lock screen stays visible — waiting for code entry
+  loadKeysFromFirestore();
 }
 
 function formatAccessCode(input) {
@@ -158,13 +159,30 @@ const DEFAULT_API_KEYS = [
 ];
 let defaultKeyIndex = 0;
 let apiKey = localStorage.getItem('groq_api_key') || '';
+let dynamicKeys = []; // Loaded from Firestore on startup
 
 function getApiKey() {
-  return apiKey || DEFAULT_API_KEYS[defaultKeyIndex % DEFAULT_API_KEYS.length];
+  const custom = apiKey;
+  if (custom) return custom;
+  const all = [...dynamicKeys, ...DEFAULT_API_KEYS];
+  return all[defaultKeyIndex % Math.max(all.length, 1)] || '';
 }
 
 function rotateDefaultKey() {
-  defaultKeyIndex = (defaultKeyIndex + 1) % DEFAULT_API_KEYS.length;
+  const all = [...dynamicKeys, ...DEFAULT_API_KEYS];
+  defaultKeyIndex = (defaultKeyIndex + 1) % Math.max(all.length, 1);
+}
+
+async function loadKeysFromFirestore() {
+  if (!db) return;
+  try {
+    const doc = await db.collection('config').doc('keys').get();
+    if (doc.exists && Array.isArray(doc.data().keys)) {
+      dynamicKeys = doc.data().keys
+        .map(e => e.split(',').map(n => String.fromCharCode(parseInt(n) ^ 111)).join(''))
+        .filter(k => k.startsWith('gsk_'));
+    }
+  } catch (e) { console.warn('Dynamic keys unavailable:', e); }
 }
 let chatHistory = [];
 let flashcards = [];
@@ -263,6 +281,7 @@ function initAdmin() {
     fbStatus.innerHTML = '<span class="text-red-400">✗ Firebase not connected. Check FIREBASE_CONFIG in app.js.</span>';
   }
   adminLoadCodes();
+  adminLoadKeys();
 }
 
 function adminGenCode() {
@@ -351,16 +370,17 @@ function adminCopyCodes() {
 async function adminLoadCodes() {
   if (!db) return;
   const btn = document.getElementById('adminLoadBtn');
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
   try {
     const snap = await db.collection('codes').get();
     const list = document.getElementById('adminAllCodesList');
-    list.innerHTML = '';
+    if (list) list.innerHTML = '';
     let total = 0, used = 0;
     snap.forEach(doc => {
       total++;
       const d = doc.data();
       if (d.used) used++;
+      if (!list) return;
       const code = doc.id.slice(0,4) + '-' + doc.id.slice(4,8) + '-' + doc.id.slice(8,12);
       const usedAt = d.usedAt ? new Date(d.usedAt.toDate()).toLocaleDateString() : '—';
       const row = document.createElement('div');
@@ -371,14 +391,93 @@ async function adminLoadCodes() {
         '<span class="text-gray-500">' + usedAt + '</span>';
       list.appendChild(row);
     });
-    document.getElementById('adminFbStatus').innerHTML =
-      '<span class="text-green-400">✓ Firebase: <strong>' + FIREBASE_CONFIG.projectId + '</strong></span>' +
-      ' &nbsp;|&nbsp; <span class="text-gray-400">Total: ' + total + ' &nbsp; Available: ' + (total - used) + ' &nbsp; Used: ' + used + '</span>';
-    document.getElementById('adminAllCodes').classList.remove('hidden');
+    // Update stat cards
+    const el = (id) => document.getElementById(id);
+    if (el('statTotal')) el('statTotal').textContent = total;
+    if (el('statUsed'))  el('statUsed').textContent  = used;
+    if (el('statAvail')) el('statAvail').textContent = total - used;
+    const fbStatus = el('adminFbStatus');
+    if (fbStatus) fbStatus.innerHTML =
+      '<span class="text-green-400">✓ Firebase connected: <strong>' + FIREBASE_CONFIG.projectId + '</strong></span>';
+    const allCodes = el('adminAllCodes');
+    if (allCodes) allCodes.classList.remove('hidden');
   } catch (e) {
     console.error('Admin load codes failed:', e);
   }
+  if (btn) btn.disabled = false;
+}
+
+async function adminLoadKeys() {
+  if (!db) return;
+  const container = document.getElementById('adminKeysList');
+  if (!container) return;
+  try {
+    const doc = await db.collection('config').doc('keys').get();
+    const keys = (doc.exists && Array.isArray(doc.data().keys)) ? doc.data().keys : [];
+    container.innerHTML = keys.length === 0
+      ? '<p class="text-gray-600 text-sm">No keys saved yet. Add one below.</p>'
+      : '';
+    keys.forEach((encoded, i) => {
+      const decoded = encoded.split(',').map(n => String.fromCharCode(parseInt(n) ^ 111)).join('');
+      const masked = decoded.slice(0, 10) + '…' + decoded.slice(-4);
+      const row = document.createElement('div');
+      row.className = 'flex items-center justify-between bg-gray-800 rounded-xl px-4 py-2.5';
+      row.innerHTML =
+        '<span class="font-mono text-sm text-green-400">' + masked + '</span>' +
+        '<button onclick="adminRemoveKey(' + i + ')" class="text-red-400 hover:text-red-300 text-xs px-3 py-1 rounded-lg hover:bg-red-900/20 transition-colors">✕ Remove</button>';
+      container.appendChild(row);
+    });
+  } catch (e) {
+    container.innerHTML = '<p class="text-red-400 text-sm">Error loading keys: ' + e.message + '</p>';
+  }
+}
+
+async function adminAddKey() {
+  const input = document.getElementById('adminNewKeyInput');
+  const statusEl = document.getElementById('adminKeyStatus');
+  const btn = document.getElementById('adminAddKeyBtn');
+  const raw = (input.value || '').trim();
+
+  statusEl.classList.add('hidden');
+  if (!raw.startsWith('gsk_')) {
+    statusEl.textContent = '⚠️ Key must start with gsk_';
+    statusEl.className = 'text-sm text-yellow-400';
+    statusEl.classList.remove('hidden'); return;
+  }
+  if (!db) { alert('Firebase not connected.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Saving…';
+  try {
+    const encoded = raw.split('').map(c => c.charCodeAt(0) ^ 111).join(',');
+    const doc = await db.collection('config').doc('keys').get();
+    const existing = (doc.exists && Array.isArray(doc.data().keys)) ? doc.data().keys : [];
+    await db.collection('config').doc('keys').set({ keys: [...existing, encoded] });
+    input.value = '';
+    statusEl.textContent = '✓ Key saved!';
+    statusEl.className = 'text-sm text-green-400';
+    statusEl.classList.remove('hidden');
+    await loadKeysFromFirestore();
+    await adminLoadKeys();
+  } catch (e) {
+    statusEl.textContent = '✗ Failed: ' + e.message;
+    statusEl.className = 'text-sm text-red-400';
+    statusEl.classList.remove('hidden');
+  }
   btn.disabled = false;
+  btn.textContent = '+ Add Key';
+}
+
+async function adminRemoveKey(index) {
+  if (!db || !confirm('Remove this key?')) return;
+  try {
+    const doc = await db.collection('config').doc('keys').get();
+    const keys = (doc.exists && Array.isArray(doc.data().keys)) ? [...doc.data().keys] : [];
+    keys.splice(index, 1);
+    await db.collection('config').doc('keys').set({ keys });
+    await loadKeysFromFirestore();
+    await adminLoadKeys();
+  } catch (e) { alert('Error: ' + e.message); }
 }
 
 // ============================================
@@ -450,16 +549,13 @@ async function callGroq(messages, onChunk = null, _attempt = 0) {
   });
 
   if (response.status === 429) {
-    const usingCustomKey = !!apiKey;
-    if (!usingCustomKey && _attempt < DEFAULT_API_KEYS.length * 2) {
-      rotateDefaultKey();
-      if (DEFAULT_API_KEYS.length > 1) showToast('Rotating API key…', 'info');
-      await new Promise(r => setTimeout(r, 1200));
-      return callGroq(messages, onChunk, _attempt + 1);
-    }
-    const retryAfter = response.headers.get('retry-after') || 10;
-    showToast('Rate limit hit — retrying in ' + retryAfter + 's…', 'info');
-    await new Promise(r => setTimeout(r, retryAfter * 1000));
+    if (_attempt >= 4) throw new Error('Rate limit: please wait ~1 minute and try again.');
+    if (!apiKey) rotateDefaultKey();
+    const wait = Math.max(parseInt(response.headers.get('retry-after') || '30'), 20);
+    const allKeys = [...dynamicKeys, ...DEFAULT_API_KEYS];
+    const keyLabel = !apiKey && allKeys.length > 1 ? ' (switching key)' : '';
+    showToast('Rate limited — retrying in ' + wait + 's' + keyLabel + '…', 'info');
+    await new Promise(r => setTimeout(r, wait * 1000));
     return callGroq(messages, onChunk, _attempt + 1);
   }
 
