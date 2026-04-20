@@ -170,6 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
   showPanel('chat');
   updateKeyIndicator();
   initTabCloak();
+  initAdmin();
 });
 
 // ============================================
@@ -219,6 +220,121 @@ function updateKeyIndicator() {
   el.className = isCustom
     ? 'text-xs text-green-400 font-medium'
     : 'text-xs text-gray-500 font-medium';
+}
+
+// ============================================
+// ADMIN PANEL
+// ============================================
+// Admin URL: https://pt0407.github.io/study-ai/?admin=PLATO
+const _ap = 'OTALLP'.split('').reverse().join('') + ''; // decoded at runtime only
+
+let adminCodes = [];
+
+function initAdmin() {
+  const param = new URLSearchParams(window.location.search).get('admin');
+  if (!param) return;
+  // Decode stored admin password
+  const pwd = [80,76,65,84,79].map(c => String.fromCharCode(c)).join('');
+  if (param !== pwd) return;
+
+  const panel = document.getElementById('adminPanel');
+  if (!panel) return;
+  panel.classList.remove('hidden');
+
+  // Show Firebase status in admin panel
+  const fbStatus = document.getElementById('adminFbStatus');
+  if (db) {
+    fbStatus.innerHTML = '<span class="text-green-400">✓ Connected to Firebase: <strong>' + FIREBASE_CONFIG.projectId + '</strong></span>';
+  } else {
+    fbStatus.innerHTML = '<span class="text-red-400">✗ Firebase not connected. Check FIREBASE_CONFIG in app.js.</span>';
+  }
+  adminLoadCodes();
+}
+
+function adminGenCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c = '';
+  for (let i = 0; i < 12; i++) c += chars[Math.floor(Math.random() * chars.length)];
+  return c.slice(0,4) + '-' + c.slice(4,8) + '-' + c.slice(8,12);
+}
+
+async function adminGenerateCodes() {
+  if (!db) { alert('Firebase not connected.'); return; }
+  const count = Math.min(500, Math.max(1, parseInt(document.getElementById('adminCodeCount').value) || 10));
+  const btn = document.getElementById('adminGenBtn');
+  const status = document.getElementById('adminGenStatus');
+  btn.disabled = true;
+  btn.textContent = '⏳ Uploading...';
+  status.classList.add('hidden');
+
+  adminCodes = [];
+  // Firestore batch limit is 500
+  const batch = db.batch();
+  for (let i = 0; i < count; i++) {
+    const raw = adminGenCode();
+    const key = raw.replace(/-/g, '');
+    adminCodes.push(raw);
+    batch.set(db.collection('codes').doc(key), {
+      used: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
+  try {
+    await batch.commit();
+    status.textContent = '✓ ' + count + ' codes uploaded!';
+    status.className = 'text-sm text-green-400';
+    status.classList.remove('hidden');
+
+    const list = document.getElementById('adminCodesList');
+    list.innerHTML = adminCodes.map(c => '<div>' + c + '</div>').join('');
+    document.getElementById('adminCodesOutput').classList.remove('hidden');
+    adminLoadCodes();
+  } catch (e) {
+    status.textContent = '✗ Upload failed: ' + e.message;
+    status.className = 'text-sm text-red-400';
+    status.classList.remove('hidden');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Generate & Upload';
+}
+
+function adminCopyCodes() {
+  navigator.clipboard.writeText(adminCodes.join('\n'))
+    .then(() => showToast('Codes copied to clipboard!', 'success'));
+}
+
+async function adminLoadCodes() {
+  if (!db) return;
+  const btn = document.getElementById('adminLoadBtn');
+  btn.disabled = true;
+  try {
+    const snap = await db.collection('codes').get();
+    const list = document.getElementById('adminAllCodesList');
+    list.innerHTML = '';
+    let total = 0, used = 0;
+    snap.forEach(doc => {
+      total++;
+      const d = doc.data();
+      if (d.used) used++;
+      const code = doc.id.slice(0,4) + '-' + doc.id.slice(4,8) + '-' + doc.id.slice(8,12);
+      const usedAt = d.usedAt ? new Date(d.usedAt.toDate()).toLocaleDateString() : '—';
+      const row = document.createElement('div');
+      row.className = 'flex gap-6 items-center';
+      row.innerHTML =
+        '<span class="w-44 text-white">' + code + '</span>' +
+        '<span class="w-24 ' + (d.used ? 'text-red-400' : 'text-green-400') + '">' + (d.used ? '✗ Used' : '✓ Available') + '</span>' +
+        '<span class="text-gray-500">' + usedAt + '</span>';
+      list.appendChild(row);
+    });
+    document.getElementById('adminFbStatus').innerHTML =
+      '<span class="text-green-400">✓ Firebase: <strong>' + FIREBASE_CONFIG.projectId + '</strong></span>' +
+      ' &nbsp;|&nbsp; <span class="text-gray-400">Total: ' + total + ' &nbsp; Available: ' + (total - used) + ' &nbsp; Used: ' + used + '</span>';
+    document.getElementById('adminAllCodes').classList.remove('hidden');
+  } catch (e) {
+    console.error('Admin load codes failed:', e);
+  }
+  btn.disabled = false;
 }
 
 // ============================================
