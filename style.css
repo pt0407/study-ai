@@ -1,0 +1,229 @@
+/* ===========================
+   Typing cursor
+=========================== */
+.typing-cursor {
+  display: inline-block;
+  color: #a78bfa;
+  animation: blink 0.9s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ===========================
+   Navigation buttons
+=========================== */
+.nav-btn {
+  color: #6b7280;
+}
+
+.nav-btn:hover {
+  background-color: #1f2937;
+  color: #e5e7eb;
+}
+
+.nav-btn.active {
+  background-color: #1f2937;
+  color: #f9fafb;
+  box-shadow: inset 2px 0 0 #7c3aed;
+}
+
+/* ===========================
+   Prose / Markdown output
+=========================== */
+.prose-output h1,
+.prose-output h2,
+.prose-output h3,
+.prose-output h4 {
+  color: #f3f4f6;
+  font-weight: 700;
+  margin-top: 1.4rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+}
+
+.prose-output h1 { font-size: 1.4rem; }
+.prose-output h2 { font-size: 1.2rem; }
+.prose-output h3 { font-size: 1.05rem; }
+.prose-output h4 { font-size: 0.95rem; }
+
+.prose-output p {
+  margin-bottom: 0.75rem;
+  line-height: 1.8;
+}
+
+.prose-output ul,
+.prose-output ol {
+  padding-left: 1.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose-output li {
+  margin-bottom: 0.3rem;
+  line-height: 1.7;
+}
+
+.prose-output code {
+  background: #374151;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.82em;
+  color: #c4b5fd;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+}
+
+.prose-output pre {
+  background: #111827;
+  border: 1px solid #374151;
+  border-radius: 10px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin-bottom: 0.75rem;
+}
+
+.prose-output pre code {
+  background: transparent;
+  padding: 0;
+  color: #d1d5db;
+  font-size: 0.85em;
+}
+
+.prose-output blockquote {
+  border-left: 3px solid #7c3aed;
+  padding-left: 1rem;
+  color: #9ca3af;
+  font-style: italic;
+  margin-bottom: 0.75rem;
+}
+
+.prose-output strong {
+  color: #f3f4f6;
+  font-weight: 600;
+}
+
+.prose-output a {
+  color: #a78bfa;
+  text-decoration: underline;
+}
+
+.prose-output a:hover {
+  color: #c4b5fd;
+}
+
+.prose-output table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.prose-output th {
+  background: #1f2937;
+  color: #e5e7eb;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  border: 1px solid #374151;
+}
+
+.prose-output td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #374151;
+  color: #d1d5db;
+}
+
+.prose-output tr:nth-child(even) td {
+  background: #1a2230;
+}
+
+.prose-output hr {
+  border: none;
+  border-top: 1px solid #374151;
+  margin: 1rem 0;
+}
+
+/* ===========================
+   Flashcard 3D flip
+=========================== */
+.flashcard-container {
+  perspective: 1000px;
+}
+
+.flashcard-inner {
+  position: relative;
+  height: 280px;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.flashcard-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.flashcard-back {
+  transform: rotateY(180deg);
+}
+
+/* ===========================
+   Quiz option buttons
+=========================== */
+.quiz-option:not(:disabled):hover {
+  border-color: #7c3aed;
+  color: #f9fafb;
+  background-color: rgba(124, 58, 237, 0.08);
+}
+
+/* ===========================
+   Scrollbar styling
+=========================== */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* ===========================
+   Smooth panel transitions
+=========================== */
+.panel {
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ===========================
+   Focus ring on inputs
+=========================== */
+textarea:focus,
+input:focus,
+select:focus {
+  outline: none;
+}
+
+/* ===========================
+   Disabled buttons
+=========================== */
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
