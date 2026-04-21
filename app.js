@@ -294,6 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initTabCloak();
   initAdmin();
   loadChatHistory();
+  window.addEventListener('beforeunload', _flushAnalytics);
 });
 
 // ============================================
@@ -481,6 +482,7 @@ function initAdmin() {
   }
   adminLoadCodes();
   adminLoadKeys();
+  adminLoadAnalytics();
 
   // Reset all reveal states on open
   _platoRevealed = false;
@@ -710,6 +712,110 @@ async function adminRemoveKey(index) {
   } catch (e) { alert('Error: ' + e.message); }
 }
 
+async function adminLoadAnalytics() {
+  if (!db) return;
+  const container = document.getElementById('analyticsContent');
+  if (!container) return;
+  const days = parseInt(document.getElementById('analyticsRange')?.value || '7');
+  const btn = document.getElementById('analyticsRefreshBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+
+  try {
+    const dates = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      dates.push(d.toISOString().slice(0, 10));
+    }
+    const docs = await Promise.all(dates.map(d => db.collection('analytics').doc(d).get()));
+
+    const a = { qt:0, qc:0, qf:0, qq:0, qs:0, qsp:0, pg:0, por:0, pcb:0, pgm:0,
+      tp:0, tc:0, te:0, et:0, erl:0, ch:0, ok:0, lms:0, ln:0, daily:[] };
+    docs.forEach((doc, i) => {
+      const d = doc.exists ? doc.data() : {};
+      a.qt  += d.q?.total || 0;  a.qc  += d.q?.chat || 0;    a.qf  += d.q?.flashcard || 0;
+      a.qq  += d.q?.quiz  || 0;  a.qs  += d.q?.summarize || 0; a.qsp += d.q?.studyplan || 0;
+      a.pg  += d.p?.groq  || 0;  a.por += d.p?.openrouter || 0;
+      a.pcb += d.p?.cerebras || 0; a.pgm += d.p?.gemini || 0;
+      a.tp  += d.tok?.prompt || 0; a.tc += d.tok?.completion || 0; a.te += d.tok?.estimated || 0;
+      a.et  += d.err?.total || 0; a.erl += d.err?.rl || 0;
+      a.ch  += d.cache_hits || 0; a.ok += d.success || 0;
+      a.lms += d.lat?.ms || 0;    a.ln += d.lat?.n || 0;
+      a.daily.push({ date: dates[i].slice(5), q: d.q?.total || 0 });
+    });
+
+    const totalReq = a.qt + a.ch;
+    const totalTok = a.tp + a.tc + (a.te > 0 && (a.tp + a.tc) === 0 ? a.te : 0);
+    const avgLat = a.ln > 0 ? Math.round(a.lms / a.ln) : 0;
+    const successRate = a.qt > 0 ? Math.round(a.ok / a.qt * 100) : 100;
+    const cacheRate  = totalReq > 0 ? Math.round(a.ch / totalReq * 100) : 0;
+    const maxDay = Math.max(...a.daily.map(d => d.q), 1);
+
+    const stat = (label, val, sub = '', color = 'text-white') =>
+      '<div class="bg-gray-850 border border-gray-700/50 rounded-xl p-4">' +
+        '<p class="text-gray-500 text-xs mb-1 uppercase tracking-wide">' + label + '</p>' +
+        '<p class="' + color + ' text-2xl font-bold leading-none">' + val + '</p>' +
+        (sub ? '<p class="text-gray-600 text-xs mt-1.5 leading-snug">' + sub + '</p>' : '') +
+      '</div>';
+
+    const bar = (label, val, max, col = 'bg-purple-600') =>
+      '<div class="flex items-center gap-2.5">' +
+        '<span class="text-gray-400 text-xs w-20 shrink-0 truncate">' + label + '</span>' +
+        '<div class="flex-1 bg-gray-700 rounded-full h-1.5">' +
+          '<div class="' + col + ' h-1.5 rounded-full transition-all" style="width:' + (max>0?Math.min(Math.round(val/max*100),100):0) + '%"></div>' +
+        '</div>' +
+        '<span class="text-gray-300 text-xs w-8 text-right shrink-0">' + val + '</span>' +
+      '</div>';
+
+    const dailyBars = [...a.daily].reverse().map(d =>
+      '<div class="flex-1 flex flex-col items-center gap-1 min-w-0">' +
+        '<div class="w-full bg-purple-600 rounded-sm transition-all" style="height:' + (d.q > 0 ? Math.max(Math.round(d.q/maxDay*100),6) : 2) + '%; opacity:' + (d.q > 0 ? 1 : 0.2) + '"></div>' +
+        '<span class="text-gray-600 text-[9px] truncate w-full text-center">' + d.date + '</span>' +
+      '</div>'
+    ).join('');
+
+    const tokStr = totalTok > 0 ? totalTok.toLocaleString() : '—';
+    const tokSub = a.tp > 0
+      ? a.tp.toLocaleString() + ' in / ' + a.tc.toLocaleString() + ' out'
+      : (a.te > 0 ? '~' + a.te.toLocaleString() + ' est.' : 'no data yet');
+
+    container.innerHTML =
+      '<div class="grid grid-cols-2 gap-3 mb-4">' +
+        stat('Total Requests', totalReq.toLocaleString(), a.ch + ' served from cache') +
+        stat('Tokens Used', tokStr, tokSub, totalTok > 0 ? 'text-blue-300' : 'text-gray-500') +
+        stat('Success Rate', successRate + '%', a.ok + ' ok · ' + a.et + ' failed', successRate >= 90 ? 'text-green-400' : successRate >= 70 ? 'text-yellow-400' : 'text-red-400') +
+        stat('Rate Limits', a.erl, a.erl > 0 ? 'auto-retried, keys rotated' : 'none — keys healthy ✓', a.erl > 5 ? 'text-yellow-400' : 'text-white') +
+        stat('Cache Saves', cacheRate + '%', a.ch + ' requests skipped API call', 'text-cyan-400') +
+        stat('Avg Latency', avgLat > 0 ? avgLat + ' ms' : '—', a.ln + ' calls measured') +
+      '</div>' +
+      (days > 1 ?
+        '<div class="bg-gray-800 rounded-xl p-4 mb-4">' +
+          '<p class="text-gray-500 text-xs uppercase tracking-wide mb-3">Queries / Day</p>' +
+          '<div class="flex items-end gap-1 h-14">' + dailyBars + '</div>' +
+        '</div>'
+      : '') +
+      '<div class="grid grid-cols-2 gap-3">' +
+        '<div class="bg-gray-800 rounded-xl p-4 space-y-2.5">' +
+          '<p class="text-gray-500 text-xs uppercase tracking-wide mb-3">By Feature</p>' +
+          bar('Chat',       a.qc,  a.qt, 'bg-purple-500') +
+          bar('Flashcards', a.qf,  a.qt, 'bg-blue-500') +
+          bar('Quiz',       a.qq,  a.qt, 'bg-green-500') +
+          bar('Summarize',  a.qs,  a.qt, 'bg-yellow-500') +
+          bar('Study Plan', a.qsp, a.qt, 'bg-pink-500') +
+        '</div>' +
+        '<div class="bg-gray-800 rounded-xl p-4 space-y-2.5">' +
+          '<p class="text-gray-500 text-xs uppercase tracking-wide mb-3">By Provider</p>' +
+          bar('Groq',       a.pg,  a.qt, 'bg-orange-500') +
+          bar('Gemini',     a.pgm, a.qt, 'bg-blue-400') +
+          bar('Cerebras',   a.pcb, a.qt, 'bg-cyan-500') +
+          bar('OpenRouter', a.por, a.qt, 'bg-emerald-500') +
+        '</div>' +
+      '</div>';
+  } catch (e) {
+    container.innerHTML = '<p class="text-red-400 text-sm">Error: ' + e.message + '</p>';
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh'; }
+}
+
 function togglePlatoReveal() {
   _platoRevealed = !_platoRevealed;
   const pw = document.getElementById('adminUrlPassword');
@@ -812,6 +918,90 @@ function showPanel(name) {
 }
 
 // ============================================
+// ANALYTICS
+// ============================================
+const _agg = {
+  q: { total:0, chat:0, flashcard:0, quiz:0, summarize:0, studyplan:0 },
+  p: { groq:0, openrouter:0, cerebras:0, gemini:0 },
+  tok: { prompt:0, completion:0, estimated:0 },
+  err: { total:0, rate_limits:0 },
+  cache_hits:0, success:0, lat_ms:0, lat_n:0,
+};
+let _aggFlushTimer = null;
+
+function _inferContext(messages) {
+  const s = (messages[0]?.content || '').toLowerCase();
+  if (s.includes('flashcard')) return 'flashcard';
+  if (s.includes('quiz') || s.includes('multiple-choice')) return 'quiz';
+  if (s.includes('summari')) return 'summarize';
+  if (s.includes('study plan') || s.includes('educational coach')) return 'studyplan';
+  return 'chat';
+}
+
+function _analyticsTrack(event, d = {}) {
+  if (event === 'query_start') {
+    _agg.q.total++;
+    const f = d.feature || 'chat';
+    if (_agg.q[f] !== undefined) _agg.q[f]++;
+    const p = d.provider || 'groq';
+    if (_agg.p[p] !== undefined) _agg.p[p]++;
+  } else if (event === 'query_success') {
+    _agg.success++;
+    if (d.latency_ms)        { _agg.lat_ms += d.latency_ms; _agg.lat_n++; }
+    if (d.prompt_tokens)       _agg.tok.prompt     += d.prompt_tokens;
+    if (d.completion_tokens)   _agg.tok.completion += d.completion_tokens;
+    if (d.estimated_tokens)    _agg.tok.estimated  += d.estimated_tokens;
+  } else if (event === 'rate_limit') {
+    _agg.err.rate_limits++; _agg.err.total++;
+  } else if (event === 'error') {
+    _agg.err.total++;
+  } else if (event === 'cache_hit') {
+    _agg.cache_hits++; _agg.q.total++;
+    const f = d.feature || 'chat';
+    if (_agg.q[f] !== undefined) _agg.q[f]++;
+  }
+  if (!_aggFlushTimer) _aggFlushTimer = setTimeout(_flushAnalytics, 30000);
+}
+
+async function _flushAnalytics() {
+  _aggFlushTimer = null;
+  if (!db) return;
+  const hasData = _agg.q.total > 0 || _agg.cache_hits > 0;
+  if (!hasData) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const inc = firebase.firestore.FieldValue.increment;
+  const u = {};
+  if (_agg.q.total)           u['q.total']       = inc(_agg.q.total);
+  if (_agg.q.chat)            u['q.chat']        = inc(_agg.q.chat);
+  if (_agg.q.flashcard)       u['q.flashcard']   = inc(_agg.q.flashcard);
+  if (_agg.q.quiz)            u['q.quiz']        = inc(_agg.q.quiz);
+  if (_agg.q.summarize)       u['q.summarize']   = inc(_agg.q.summarize);
+  if (_agg.q.studyplan)       u['q.studyplan']   = inc(_agg.q.studyplan);
+  if (_agg.p.groq)            u['p.groq']        = inc(_agg.p.groq);
+  if (_agg.p.openrouter)      u['p.openrouter']  = inc(_agg.p.openrouter);
+  if (_agg.p.cerebras)        u['p.cerebras']    = inc(_agg.p.cerebras);
+  if (_agg.p.gemini)          u['p.gemini']      = inc(_agg.p.gemini);
+  if (_agg.tok.prompt)        u['tok.prompt']    = inc(_agg.tok.prompt);
+  if (_agg.tok.completion)    u['tok.completion']= inc(_agg.tok.completion);
+  if (_agg.tok.estimated)     u['tok.estimated'] = inc(_agg.tok.estimated);
+  if (_agg.err.total)         u['err.total']     = inc(_agg.err.total);
+  if (_agg.err.rate_limits)   u['err.rl']        = inc(_agg.err.rate_limits);
+  if (_agg.cache_hits)        u['cache_hits']    = inc(_agg.cache_hits);
+  if (_agg.success)           u['success']       = inc(_agg.success);
+  if (_agg.lat_ms)            u['lat.ms']        = inc(_agg.lat_ms);
+  if (_agg.lat_n)             u['lat.n']         = inc(_agg.lat_n);
+  try {
+    await db.collection('analytics').doc(today).set(u, { merge: true });
+    // Reset buffer after flush
+    _agg.q={total:0,chat:0,flashcard:0,quiz:0,summarize:0,studyplan:0};
+    _agg.p={groq:0,openrouter:0,cerebras:0,gemini:0};
+    _agg.tok={prompt:0,completion:0,estimated:0};
+    _agg.err={total:0,rate_limits:0};
+    _agg.cache_hits=0; _agg.success=0; _agg.lat_ms=0; _agg.lat_n=0;
+  } catch (e) { console.warn('Analytics flush failed:', e); }
+}
+
+// ============================================
 // RESPONSE CACHE (localStorage + 24h TTL)
 // ============================================
 const _CACHE_TTL = 24 * 60 * 60 * 1000;
@@ -852,17 +1042,23 @@ function cacheSet(key, response) {
 // ============================================
 // AI API (multi-provider, streaming)
 // ============================================
-async function callAI(messages, onChunk = null, _attempt = 0) {
+async function callAI(messages, onChunk = null, _attempt = 0, _ctx = null) {
+  const ctx = _ctx || _inferContext(messages);
+
   // Cache hit for non-streaming calls (flashcards, quiz JSON generation)
   if (onChunk === null && _attempt === 0) {
     const hit = cacheGet(_buildCacheKey(messages));
-    if (hit) { showToast('⚡ Instant result from cache', 'info'); return hit; }
+    if (hit) { showToast('⚡ Instant result from cache', 'info'); _analyticsTrack('cache_hit', { feature: ctx }); return hit; }
   }
+
+  const t0 = Date.now();
+  if (_attempt === 0) _analyticsTrack('query_start', { feature: ctx, provider: currentProvider });
 
   const prov = PROVIDERS[currentProvider] || PROVIDERS.groq;
   const activeKey = getProviderKey(currentProvider);
 
   if (!activeKey) {
+    _analyticsTrack('error');
     showToast('No ' + prov.name + ' key — click 🔑 to add one', 'error');
     throw new Error('No API key');
   }
@@ -891,9 +1087,10 @@ async function callAI(messages, onChunk = null, _attempt = 0) {
     const wait = Math.max(parseInt(response.headers.get('retry-after') || '30'), 20);
     const allKeys = [...dynamicKeys, ...DEFAULT_API_KEYS];
     const keyLabel = currentProvider === 'groq' && !apiKey && allKeys.length > 1 ? ' (switching key)' : '';
+    _analyticsTrack('rate_limit');
     showToast('Rate limited — retrying in ' + wait + 's' + keyLabel + '…', 'info');
     await new Promise(r => setTimeout(r, wait * 1000));
-    return callAI(messages, onChunk, _attempt + 1);
+    return callAI(messages, onChunk, _attempt + 1, ctx);
   }
 
   if (!response.ok) {
@@ -902,12 +1099,18 @@ async function callAI(messages, onChunk = null, _attempt = 0) {
       const err = await response.json();
       errMsg = err.error?.message || errMsg;
     } catch (_) {}
+    _analyticsTrack('error');
     throw new Error(errMsg);
   }
 
   if (!streaming) {
     const data = await response.json();
     const result = data.choices[0].message.content;
+    _analyticsTrack('query_success', {
+      latency_ms: Date.now() - t0,
+      prompt_tokens: data.usage?.prompt_tokens || 0,
+      completion_tokens: data.usage?.completion_tokens || 0,
+    });
     cacheSet(_buildCacheKey(messages), result);
     return result;
   }
@@ -934,6 +1137,10 @@ async function callAI(messages, onChunk = null, _attempt = 0) {
     }
   }
 
+  _analyticsTrack('query_success', {
+    latency_ms: Date.now() - t0,
+    estimated_tokens: Math.round(fullText.length / 4),
+  });
   return fullText;
 }
 

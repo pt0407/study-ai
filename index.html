@@ -611,6 +611,31 @@
         <p id="adminKeyStatus" class="text-sm hidden"></p>
       </div>
 
+      <!-- Analytics -->
+      <div class="bg-gray-900 border border-emerald-900/40 rounded-2xl p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-semibold text-white">📊 Analytics</h2>
+            <p class="text-gray-500 text-sm">Usage across all users — auto-tracked per API call</p>
+          </div>
+          <div class="flex gap-2 items-center">
+            <select id="analyticsRange" onchange="adminLoadAnalytics()"
+              class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-600">
+              <option value="1">Today</option>
+              <option value="7" selected>Last 7 days</option>
+              <option value="30">Last 30 days</option>
+            </select>
+            <button onclick="adminLoadAnalytics()" id="analyticsRefreshBtn"
+              class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+              ↻ Refresh
+            </button>
+          </div>
+        </div>
+        <div id="analyticsContent">
+          <p class="text-gray-600 text-sm text-center py-4">Loading analytics…</p>
+        </div>
+      </div>
+
       <!-- API Key Encoder -->
       <div class="bg-gray-900 border border-purple-800/50 rounded-2xl p-6 space-y-4">
         <div>
