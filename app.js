@@ -151,15 +151,24 @@ function setLockError(msg) {
 // ============================================
 // STATE
 // ============================================
-// Add more Groq API keys here for higher throughput (rotate on rate limit).
-// Each free account at console.groq.com gives you one key.
+// Groq default keys (each free account at console.groq.com gives one key)
 const DEFAULT_API_KEYS = [
   [8,28,4,48,40,13,0,13,21,32,56,1,58,45,88,24,44,44,88,43,23,33,57,54,56,40,11,22,13,92,41,54,21,28,38,62,12,62,56,31,34,2,40,40,8,6,30,4,42,60,4,5,13,41,44,26].map(c=>String.fromCharCode(c^111)).join(''),
-  // Paste more encoded keys here — see README for encoding instructions
 ];
+// Gemini default keys (aistudio.google.com/apikey)
+const DEFAULT_GEMINI_KEYS = [
+  [46,38,21,14,60,22,46,3,3,30,94,2,4,58,28,94,29,92,53,48,34,10,37,0,91,1,0,33,55,4,60,91,41,27,35,87,92,94,28].map(c=>String.fromCharCode(c^111)).join(''),
+];
+// Cerebras default keys (cloud.cerebras.ai)
+const DEFAULT_CEREBRAS_KEYS = [
+  [12,28,4,66,23,7,89,2,29,25,4,89,4,86,11,11,5,27,24,92,93,25,27,11,9,92,7,22,11,25,89,25,86,86,4,12,22,24,4,4,90,24,31,7,2,90,27,25,31,22,4,25].map(c=>String.fromCharCode(c^111)).join(''),
+];
+
 let defaultKeyIndex = 0;
 let apiKey = localStorage.getItem('groq_api_key') || '';
-let dynamicKeys = []; // Loaded from Firestore on startup
+let dynamicKeys = [];         // Groq — loaded from Firestore
+let dynamicGeminiKeys = [];   // Gemini — loaded from Firestore
+let dynamicCerebrasKeys = []; // Cerebras — loaded from Firestore
 
 function getApiKey() {
   const custom = apiKey;
@@ -173,17 +182,97 @@ function rotateDefaultKey() {
   defaultKeyIndex = (defaultKeyIndex + 1) % Math.max(all.length, 1);
 }
 
+function getProviderKey(provId) {
+  const custom = localStorage.getItem(PROVIDERS[provId]?.storageKey || '');
+  if (custom) return custom;
+  if (provId === 'groq')     { const all = [...dynamicKeys, ...DEFAULT_API_KEYS]; return all[defaultKeyIndex % Math.max(all.length,1)] || ''; }
+  if (provId === 'gemini')   { const all = [...dynamicGeminiKeys, ...DEFAULT_GEMINI_KEYS]; return all[0] || ''; }
+  if (provId === 'cerebras') { const all = [...dynamicCerebrasKeys, ...DEFAULT_CEREBRAS_KEYS]; return all[0] || ''; }
+  return '';
+}
+
+function _decodeKeys(arr, prefix) {
+  return arr.map(e => e.split(',').map(n => String.fromCharCode(parseInt(n) ^ 111)).join('')).filter(k => k.startsWith(prefix));
+}
+
 async function loadKeysFromFirestore() {
   if (!db) return;
   try {
-    const doc = await db.collection('config').doc('keys').get();
-    if (doc.exists && Array.isArray(doc.data().keys)) {
-      dynamicKeys = doc.data().keys
-        .map(e => e.split(',').map(n => String.fromCharCode(parseInt(n) ^ 111)).join(''))
-        .filter(k => k.startsWith('gsk_'));
-    }
+    const [gDoc, gmDoc, cbDoc] = await Promise.all([
+      db.collection('config').doc('keys').get(),
+      db.collection('config').doc('gemini_keys').get(),
+      db.collection('config').doc('cerebras_keys').get(),
+    ]);
+    if (gDoc.exists  && Array.isArray(gDoc.data().keys))  dynamicKeys         = _decodeKeys(gDoc.data().keys,  'gsk_');
+    if (gmDoc.exists && Array.isArray(gmDoc.data().keys)) dynamicGeminiKeys   = _decodeKeys(gmDoc.data().keys, 'AIza');
+    if (cbDoc.exists && Array.isArray(cbDoc.data().keys)) dynamicCerebrasKeys = _decodeKeys(cbDoc.data().keys, 'csk-');
   } catch (e) { console.warn('Dynamic keys unavailable:', e); }
 }
+
+// ============================================
+// PROVIDER CONFIG
+// ============================================
+const PROVIDERS = {
+  groq: {
+    name: 'Groq',
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    storageKey: 'groq_api_key',
+    keyPlaceholder: 'gsk_...',
+    keyPrefix: 'gsk_',
+    signupUrl: 'https://console.groq.com',
+    signupLabel: 'console.groq.com (free)',
+    models: [
+      { value: 'llama-3.1-8b-instant',   label: 'Llama 3.1 8B (Fastest)' },
+      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (Best)'   },
+      { value: 'mixtral-8x7b-32768',      label: 'Mixtral 8x7B'           },
+      { value: 'gemma2-9b-it',            label: 'Gemma 2 9B'             },
+    ]
+  },
+  openrouter: {
+    name: 'OpenRouter',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    storageKey: 'openrouter_api_key',
+    keyPlaceholder: 'sk-or-...',
+    keyPrefix: 'sk-or-',
+    signupUrl: 'https://openrouter.ai/keys',
+    signupLabel: 'openrouter.ai/keys (free tier)',
+    models: [
+      { value: 'meta-llama/llama-3.3-70b-instruct:free',   label: 'Llama 3.3 70B (Free)'      },
+      { value: 'google/gemini-2.0-flash-exp:free',          label: 'Gemini 2.0 Flash (Free)'   },
+      { value: 'deepseek/deepseek-r1-distill-llama-70b:free', label: 'DeepSeek R1 70B (Free)' },
+      { value: 'mistralai/mistral-7b-instruct:free',        label: 'Mistral 7B (Free)'         },
+    ]
+  },
+  cerebras: {
+    name: 'Cerebras',
+    url: 'https://api.cerebras.ai/v1/chat/completions',
+    storageKey: 'cerebras_api_key',
+    keyPlaceholder: 'csk-...',
+    keyPrefix: 'csk-',
+    signupUrl: 'https://cloud.cerebras.ai',
+    signupLabel: 'cloud.cerebras.ai',
+    models: [
+      { value: 'llama3.1-8b', label: 'Llama 3.1 8B' },
+      { value: 'llama3.3-70b', label: 'Llama 3.3 70B' },
+    ]
+  },
+  gemini: {
+    name: 'Gemini',
+    url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    storageKey: 'gemini_api_key',
+    keyPlaceholder: 'AIza...',
+    keyPrefix: 'AIza',
+    signupUrl: 'https://aistudio.google.com/apikey',
+    signupLabel: 'aistudio.google.com (free)',
+    models: [
+      { value: 'gemini-2.0-flash',   label: 'Gemini 2.0 Flash' },
+      { value: 'gemini-1.5-flash',   label: 'Gemini 1.5 Flash' },
+      { value: 'gemini-1.5-pro',     label: 'Gemini 1.5 Pro'   },
+    ]
+  },
+};
+let currentProvider = localStorage.getItem('ai_provider') || 'groq';
+
 let chatHistory = [];
 let flashcards = [];
 let currentFlashcardIndex = 0;
@@ -200,43 +289,55 @@ document.addEventListener('DOMContentLoaded', () => {
   checkAccess();
   document.getElementById('apiModal').classList.add('hidden');
   showPanel('chat');
+  initProvider();
   updateKeyIndicator();
   initTabCloak();
   initAdmin();
+  loadChatHistory();
 });
 
 // ============================================
-// API KEY
+// PROVIDER + API KEY
 // ============================================
-function saveApiKey() {
-  const key = document.getElementById('apiKeyInput').value.trim();
-  if (!key) {
-    showToast('Please enter a Groq API key', 'error');
-    return;
-  }
-  if (!key.startsWith('gsk_')) {
-    showToast('Key should start with gsk_ — check console.groq.com', 'error');
-    return;
-  }
-  apiKey = key;
-  localStorage.setItem('groq_api_key', key);
-  document.getElementById('apiModal').classList.add('hidden');
-  updateKeyIndicator();
-  showToast('Your API key saved!', 'success');
+function initProvider() {
+  const saved = localStorage.getItem('ai_provider') || 'groq';
+  currentProvider = PROVIDERS[saved] ? saved : 'groq';
+  const sel = document.getElementById('providerSelect');
+  if (sel) sel.value = currentProvider;
+  updateModelOptions();
 }
 
-function useDefaultKey() {
-  apiKey = '';
-  localStorage.removeItem('groq_api_key');
-  document.getElementById('apiKeyInput').value = '';
-  document.getElementById('apiModal').classList.add('hidden');
+function changeProvider(prov) {
+  if (!PROVIDERS[prov]) return;
+  currentProvider = prov;
+  localStorage.setItem('ai_provider', prov);
+  const sel = document.getElementById('providerSelect');
+  if (sel) sel.value = prov;
+  updateModelOptions();
   updateKeyIndicator();
-  showToast('Using the default API key', 'success');
 }
+
+function updateModelOptions() {
+  const prov = PROVIDERS[currentProvider];
+  const select = document.getElementById('modelSelect');
+  if (!select) return;
+  const savedModel = localStorage.getItem('model_' + currentProvider);
+  select.innerHTML = prov.models.map(m =>
+    '<option value="' + m.value + '"' + (m.value === savedModel ? ' selected' : '') + '>' + m.label + '</option>'
+  ).join('');
+}
+
+function saveModelChoice() {
+  const val = document.getElementById('modelSelect')?.value;
+  if (val) localStorage.setItem('model_' + currentProvider, val);
+}
+
+// Settings modal state
+let _modalProvider = 'groq';
 
 function changeApiKey() {
-  const isCustom = localStorage.getItem('groq_api_key');
-  document.getElementById('apiKeyInput').value = isCustom ? apiKey : '';
+  _modalProvider = currentProvider;
+  refreshSettingsModal();
   document.getElementById('apiModal').classList.remove('hidden');
 }
 
@@ -244,14 +345,109 @@ function closeSettingsModal() {
   document.getElementById('apiModal').classList.add('hidden');
 }
 
+function setModalProvider(prov) {
+  _modalProvider = prov;
+  refreshSettingsModal();
+}
+
+const _MODAL_STEPS = {
+  groq: [
+    { n: 1, text: 'Go to <a href="https://console.groq.com" target="_blank" class="text-purple-400 underline">console.groq.com</a> — free, no credit card' },
+    { n: 2, text: 'Click <strong class="text-gray-200">API Keys</strong> in the left sidebar' },
+    { n: 3, text: 'Click <strong class="text-gray-200">Create API Key</strong>, give it any name' },
+    { n: 4, text: 'Copy the key (starts with <code class="bg-gray-800 px-1 rounded text-purple-300">gsk_</code>) and paste below' },
+  ],
+  openrouter: [
+    { n: 1, text: 'Go to <a href="https://openrouter.ai/keys" target="_blank" class="text-purple-400 underline">openrouter.ai/keys</a> — free tier available' },
+    { n: 2, text: 'Sign up or log in, then click <strong class="text-gray-200">Create Key</strong>' },
+    { n: 3, text: 'Copy the key (starts with <code class="bg-gray-800 px-1 rounded text-purple-300">sk-or-</code>) and paste below' },
+    { n: 4, text: 'Free models are marked <strong class="text-green-400">:free</strong> in the model dropdown — no billing needed' },
+  ],
+  cerebras: [
+    { n: 1, text: 'Go to <a href="https://cloud.cerebras.ai" target="_blank" class="text-purple-400 underline">cloud.cerebras.ai</a> — free tier, very fast inference' },
+    { n: 2, text: 'Sign up, then go to <strong class="text-gray-200">API Keys</strong> in the dashboard' },
+    { n: 3, text: 'Click <strong class="text-gray-200">Generate New API Key</strong>' },
+    { n: 4, text: 'Copy the key (starts with <code class="bg-gray-800 px-1 rounded text-purple-300">csk-</code>) and paste below' },
+  ],
+  gemini: [
+    { n: 1, text: 'Go to <a href="https://aistudio.google.com/apikey" target="_blank" class="text-purple-400 underline">aistudio.google.com/apikey</a> — completely free' },
+    { n: 2, text: 'Sign in with your Google account' },
+    { n: 3, text: 'Click <strong class="text-gray-200">Create API Key</strong> → select any Google Cloud project' },
+    { n: 4, text: 'Copy the key (starts with <code class="bg-gray-800 px-1 rounded text-purple-300">AIza</code>) and paste below' },
+  ],
+};
+
+function refreshSettingsModal() {
+  const prov = PROVIDERS[_modalProvider];
+  Object.keys(PROVIDERS).forEach(p => {
+    const tab = document.getElementById('tab-' + p);
+    if (!tab) return;
+    tab.className = 'provider-tab flex-1 py-2 rounded-lg text-xs font-semibold transition-all ' +
+      (p === _modalProvider ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white');
+  });
+
+  // Free key notice: show for providers that have built-in defaults
+  const hasDefaults = ['groq', 'gemini', 'cerebras'].includes(_modalProvider);
+  const notice = document.getElementById('modalFreeKeyNotice');
+  if (notice) notice.classList.toggle('hidden', !hasDefaults);
+
+  // How-to steps
+  const howTo = document.getElementById('modalHowTo');
+  if (howTo) {
+    const steps = _MODAL_STEPS[_modalProvider] || [];
+    howTo.innerHTML = steps.length
+      ? '<p class="text-xs text-gray-500 font-medium uppercase tracking-wide mb-2">How to get your own free key</p>' +
+        steps.map(s =>
+          '<div class="flex gap-2.5 items-start">' +
+          '<span class="bg-purple-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">' + s.n + '</span>' +
+          '<p class="text-gray-400 text-xs leading-relaxed">' + s.text + '</p>' +
+          '</div>'
+        ).join('')
+      : '';
+  }
+
+  const label = document.getElementById('modalKeyLabel');
+  if (label) label.textContent = prov.name + ' API Key' + (hasDefaults ? ' (optional)' : '');
+  const existingKey = localStorage.getItem(prov.storageKey) || '';
+  const input = document.getElementById('apiKeyInput');
+  if (input) { input.value = existingKey; input.placeholder = prov.keyPlaceholder; }
+  const resetBtn = document.getElementById('modalResetBtn');
+  if (resetBtn) resetBtn.classList.toggle('hidden', !existingKey);
+  const signupEl = document.getElementById('modalSignupLink');
+  if (signupEl) signupEl.innerHTML = 'Get a free key → <a href="' + prov.signupUrl + '" target="_blank" class="text-purple-400 underline">' + prov.signupLabel + '</a>';
+}
+
+function saveProviderKeyModal() {
+  const prov = PROVIDERS[_modalProvider];
+  const key = (document.getElementById('apiKeyInput').value || '').trim();
+  if (!key) { showToast('Please enter a key', 'error'); return; }
+  localStorage.setItem(prov.storageKey, key);
+  if (_modalProvider === 'groq') apiKey = key;
+  changeProvider(_modalProvider);
+  document.getElementById('apiModal').classList.add('hidden');
+  showToast(prov.name + ' key saved!', 'success');
+  updateKeyIndicator();
+}
+
+function resetProviderKeyModal() {
+  const prov = PROVIDERS[_modalProvider];
+  localStorage.removeItem(prov.storageKey);
+  if (_modalProvider === 'groq') apiKey = '';
+  document.getElementById('apiKeyInput').value = '';
+  if (_modalProvider === currentProvider) updateKeyIndicator();
+  showToast(prov.name + ' key removed', 'success');
+  refreshSettingsModal();
+}
+
 function updateKeyIndicator() {
-  const isCustom = !!localStorage.getItem('groq_api_key');
+  const prov = PROVIDERS[currentProvider];
+  const hasCustom = !!localStorage.getItem(prov?.storageKey || '');
+  const hasDefault = ['groq','gemini','cerebras'].includes(currentProvider);
   const el = document.getElementById('keyIndicator');
   if (!el) return;
-  el.textContent = isCustom ? '🔑 Your Key' : '🔑 Default Key';
-  el.className = isCustom
-    ? 'text-xs text-green-400 font-medium'
-    : 'text-xs text-gray-500 font-medium';
+  const provName = prov?.name || 'Groq';
+  el.textContent = hasCustom ? ('\ud83d\udd11 ' + provName + ' \u00b7 Your Key') : (hasDefault ? '\ud83d\udd11 ' + provName + ' \u00b7 Default' : '\ud83d\udd11 ' + provName + ' \u00b7 No Key');
+  el.className = hasCustom ? 'text-xs text-green-400 font-medium' : (hasDefault ? 'text-xs text-gray-500 font-medium' : 'text-xs text-red-400 font-medium');
 }
 
 // ============================================
@@ -261,6 +457,9 @@ function updateKeyIndicator() {
 const _ap = 'OTALLP'.split('').reverse().join('') + ''; // decoded at runtime only
 
 let adminCodes = [];
+let _platoRevealed = false;
+let _genCodesRevealed = false;
+let _allCodesRevealed = false;
 
 function initAdmin() {
   const param = new URLSearchParams(window.location.search).get('admin');
@@ -282,6 +481,23 @@ function initAdmin() {
   }
   adminLoadCodes();
   adminLoadKeys();
+
+  // Reset all reveal states on open
+  _platoRevealed = false;
+  _genCodesRevealed = false;
+  _allCodesRevealed = false;
+  const pwEl = document.getElementById('adminUrlPassword');
+  if (pwEl) pwEl.classList.add('blur-sm', 'select-none');
+  const platoBtn = document.getElementById('platoRevealBtn');
+  if (platoBtn) platoBtn.textContent = '👁 Reveal';
+  const genBtn = document.getElementById('genCodesRevealBtn');
+  if (genBtn) genBtn.textContent = '👁 Reveal';
+  const genList = document.getElementById('adminCodesList');
+  if (genList) genList.classList.add('blur-sm');
+  const allBtn = document.getElementById('allCodesRevealBtn');
+  if (allBtn) allBtn.textContent = '👁 Reveal';
+  const allList = document.getElementById('adminAllCodesList');
+  if (allList) allList.classList.add('blur-sm');
 }
 
 function adminGenCode() {
@@ -407,15 +623,24 @@ async function adminLoadCodes() {
   if (btn) btn.disabled = false;
 }
 
+const _ADMIN_PROV_DOCS = { groq: 'keys', gemini: 'gemini_keys', cerebras: 'cerebras_keys' };
+const _ADMIN_PROV_PREFIX = { groq: 'gsk_', gemini: 'AIza', cerebras: 'csk-' };
+
+function _adminSelectedProv() {
+  return document.getElementById('adminKeyProviderSelect')?.value || 'groq';
+}
+
 async function adminLoadKeys() {
   if (!db) return;
   const container = document.getElementById('adminKeysList');
   if (!container) return;
+  const prov = _adminSelectedProv();
+  const docId = _ADMIN_PROV_DOCS[prov];
   try {
-    const doc = await db.collection('config').doc('keys').get();
+    const doc = await db.collection('config').doc(docId).get();
     const keys = (doc.exists && Array.isArray(doc.data().keys)) ? doc.data().keys : [];
     container.innerHTML = keys.length === 0
-      ? '<p class="text-gray-600 text-sm">No keys saved yet. Add one below.</p>'
+      ? '<p class="text-gray-600 text-sm">No ' + prov + ' keys saved yet.</p>'
       : '';
     keys.forEach((encoded, i) => {
       const decoded = encoded.split(',').map(n => String.fromCharCode(parseInt(n) ^ 111)).join('');
@@ -437,10 +662,13 @@ async function adminAddKey() {
   const statusEl = document.getElementById('adminKeyStatus');
   const btn = document.getElementById('adminAddKeyBtn');
   const raw = (input.value || '').trim();
+  const prov = _adminSelectedProv();
+  const prefix = _ADMIN_PROV_PREFIX[prov];
+  const docId  = _ADMIN_PROV_DOCS[prov];
 
   statusEl.classList.add('hidden');
-  if (!raw.startsWith('gsk_')) {
-    statusEl.textContent = '⚠️ Key must start with gsk_';
+  if (!raw.startsWith(prefix)) {
+    statusEl.textContent = '⚠️ ' + (prov === 'groq' ? 'Groq' : prov === 'gemini' ? 'Gemini' : 'Cerebras') + ' key must start with ' + prefix;
     statusEl.className = 'text-sm text-yellow-400';
     statusEl.classList.remove('hidden'); return;
   }
@@ -450,9 +678,9 @@ async function adminAddKey() {
   btn.textContent = '⏳ Saving…';
   try {
     const encoded = raw.split('').map(c => c.charCodeAt(0) ^ 111).join(',');
-    const doc = await db.collection('config').doc('keys').get();
+    const doc = await db.collection('config').doc(docId).get();
     const existing = (doc.exists && Array.isArray(doc.data().keys)) ? doc.data().keys : [];
-    await db.collection('config').doc('keys').set({ keys: [...existing, encoded] });
+    await db.collection('config').doc(docId).set({ keys: [...existing, encoded] });
     input.value = '';
     statusEl.textContent = '✓ Key saved!';
     statusEl.className = 'text-sm text-green-400';
@@ -470,14 +698,62 @@ async function adminAddKey() {
 
 async function adminRemoveKey(index) {
   if (!db || !confirm('Remove this key?')) return;
+  const prov = _adminSelectedProv();
+  const docId = _ADMIN_PROV_DOCS[prov];
   try {
-    const doc = await db.collection('config').doc('keys').get();
+    const doc = await db.collection('config').doc(docId).get();
     const keys = (doc.exists && Array.isArray(doc.data().keys)) ? [...doc.data().keys] : [];
     keys.splice(index, 1);
-    await db.collection('config').doc('keys').set({ keys });
+    await db.collection('config').doc(docId).set({ keys });
     await loadKeysFromFirestore();
     await adminLoadKeys();
   } catch (e) { alert('Error: ' + e.message); }
+}
+
+function togglePlatoReveal() {
+  _platoRevealed = !_platoRevealed;
+  const pw = document.getElementById('adminUrlPassword');
+  const btn = document.getElementById('platoRevealBtn');
+  if (_platoRevealed) {
+    pw.classList.remove('blur-sm', 'select-none');
+    btn.textContent = '🙈 Hide';
+  } else {
+    pw.classList.add('blur-sm', 'select-none');
+    btn.textContent = '👁 Reveal';
+  }
+}
+
+function copyAdminUrl() {
+  const base = document.getElementById('adminUrlBase').textContent;
+  const pw = document.getElementById('adminUrlPassword').textContent;
+  navigator.clipboard.writeText(base + pw)
+    .then(() => showToast('Admin URL copied!', 'success'));
+}
+
+function toggleGenCodesReveal() {
+  _genCodesRevealed = !_genCodesRevealed;
+  const list = document.getElementById('adminCodesList');
+  const btn = document.getElementById('genCodesRevealBtn');
+  if (_genCodesRevealed) {
+    list.classList.remove('blur-sm');
+    btn.textContent = '🙈 Hide';
+  } else {
+    list.classList.add('blur-sm');
+    btn.textContent = '👁 Reveal';
+  }
+}
+
+function toggleAllCodesReveal() {
+  _allCodesRevealed = !_allCodesRevealed;
+  const list = document.getElementById('adminAllCodesList');
+  const btn = document.getElementById('allCodesRevealBtn');
+  if (_allCodesRevealed) {
+    list.classList.remove('blur-sm');
+    btn.textContent = '🙈 Hide';
+  } else {
+    list.classList.add('blur-sm');
+    btn.textContent = '👁 Reveal';
+  }
 }
 
 // ============================================
@@ -536,46 +812,92 @@ function showPanel(name) {
 }
 
 // ============================================
-// GROQ API (with streaming)
+// RESPONSE CACHE (localStorage + 24h TTL)
 // ============================================
-async function callGroq(messages, onChunk = null, _attempt = 0) {
-  const activeKey = getApiKey();
+const _CACHE_TTL = 24 * 60 * 60 * 1000;
+const _CACHE_MAX = 50;
+const _CACHE_LS  = 'ai_response_cache';
+
+function _cacheHash(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i);
+  return (h >>> 0).toString(36);
+}
+
+function _buildCacheKey(messages) {
+  const last = messages.filter(m => m.role === 'user').pop()?.content || '';
+  return _cacheHash(currentProvider + '|' + (document.getElementById('modelSelect')?.value || '') + '|' + last);
+}
+
+function _readCache() {
+  try { return JSON.parse(localStorage.getItem(_CACHE_LS) || '{}'); } catch { return {}; }
+}
+
+function cacheGet(key) {
+  const c = _readCache();
+  const e = c[key];
+  if (!e) return null;
+  if (Date.now() - e.ts > _CACHE_TTL) { delete c[key]; try { localStorage.setItem(_CACHE_LS, JSON.stringify(c)); } catch {} return null; }
+  return e.r;
+}
+
+function cacheSet(key, response) {
+  const c = _readCache();
+  c[key] = { r: response, ts: Date.now() };
+  const keys = Object.keys(c);
+  if (keys.length > _CACHE_MAX) delete c[keys.sort((a, b) => c[a].ts - c[b].ts)[0]];
+  try { localStorage.setItem(_CACHE_LS, JSON.stringify(c)); } catch {}
+}
+
+// ============================================
+// AI API (multi-provider, streaming)
+// ============================================
+async function callAI(messages, onChunk = null, _attempt = 0) {
+  // Cache hit for non-streaming calls (flashcards, quiz JSON generation)
+  if (onChunk === null && _attempt === 0) {
+    const hit = cacheGet(_buildCacheKey(messages));
+    if (hit) { showToast('⚡ Instant result from cache', 'info'); return hit; }
+  }
+
+  const prov = PROVIDERS[currentProvider] || PROVIDERS.groq;
+  const activeKey = getProviderKey(currentProvider);
+
   if (!activeKey) {
-    showToast('Please add your API key first', 'error');
+    showToast('No ' + prov.name + ' key — click 🔑 to add one', 'error');
     throw new Error('No API key');
   }
 
   const model = document.getElementById('modelSelect').value;
   const streaming = onChunk !== null;
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const headers = {
+    'Authorization': 'Bearer ' + activeKey,
+    'Content-Type': 'application/json'
+  };
+  if (currentProvider === 'openrouter') {
+    headers['HTTP-Referer'] = 'https://pt0407.github.io/study-ai';
+    headers['X-Title'] = 'Study AI';
+  }
+
+  const response = await fetch(prov.url, {
     method: 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + activeKey,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      stream: streaming,
-      max_tokens: 4096,
-      temperature: 0.7
-    })
+    headers,
+    body: JSON.stringify({ model, messages, stream: streaming, max_tokens: 4096, temperature: 0.7 })
   });
 
   if (response.status === 429) {
     if (_attempt >= 4) throw new Error('Rate limit: please wait ~1 minute and try again.');
-    if (!apiKey) rotateDefaultKey();
+    if (currentProvider === 'groq' && !apiKey) rotateDefaultKey();
     const wait = Math.max(parseInt(response.headers.get('retry-after') || '30'), 20);
     const allKeys = [...dynamicKeys, ...DEFAULT_API_KEYS];
-    const keyLabel = !apiKey && allKeys.length > 1 ? ' (switching key)' : '';
+    const keyLabel = currentProvider === 'groq' && !apiKey && allKeys.length > 1 ? ' (switching key)' : '';
     showToast('Rate limited — retrying in ' + wait + 's' + keyLabel + '…', 'info');
     await new Promise(r => setTimeout(r, wait * 1000));
-    return callGroq(messages, onChunk, _attempt + 1);
+    return callAI(messages, onChunk, _attempt + 1);
   }
 
   if (!response.ok) {
-    let errMsg = 'API request failed';
+    let errMsg = 'API request failed (' + response.status + ')';
     try {
       const err = await response.json();
       errMsg = err.error?.message || errMsg;
@@ -585,7 +907,9 @@ async function callGroq(messages, onChunk = null, _attempt = 0) {
 
   if (!streaming) {
     const data = await response.json();
-    return data.choices[0].message.content;
+    const result = data.choices[0].message.content;
+    cacheSet(_buildCacheKey(messages), result);
+    return result;
   }
 
   // ---- Streaming ----
@@ -605,10 +929,7 @@ async function callGroq(messages, onChunk = null, _attempt = 0) {
       try {
         const data = JSON.parse(line.slice(6));
         const delta = data.choices?.[0]?.delta?.content || '';
-        if (delta) {
-          fullText += delta;
-          onChunk(fullText);
-        }
+        if (delta) { fullText += delta; onChunk(fullText); }
       } catch (_) {}
     }
   }
@@ -625,6 +946,18 @@ async function sendChatMessage() {
   const input = document.getElementById('chatInput');
   const message = input.value.trim();
   if (!message) return;
+
+  // Slash command routing
+  const cmdMatch = Object.keys(CHAT_COMMANDS).find(c => message.toLowerCase().startsWith(c));
+  if (cmdMatch) {
+    const body = message.slice(cmdMatch.length).trim();
+    input.value = '';
+    input.style.height = 'auto';
+    if (cmdMatch === '/summarize') return chatAgentSummarize(body);
+    if (cmdMatch === '/flashcard') return chatAgentFlashcard(body);
+    if (cmdMatch === '/quiz')      return chatAgentQuiz(body);
+    if (cmdMatch === '/studyplan') return chatAgentStudyplan(body);
+  }
 
   input.value = '';
   input.style.height = 'auto';
@@ -649,13 +982,14 @@ async function sendChatMessage() {
     ];
 
     let finalText = '';
-    await callGroq(messages, (text) => {
+    await callAI(messages, (text) => {
       finalText = text;
       updateChatMessage(msgId, text, true);
     });
 
     chatHistory.push({ role: 'assistant', content: finalText });
     updateChatMessage(msgId, finalText, false);
+    saveChatHistory();
   } catch (err) {
     updateChatMessage(msgId, '**Error:** ' + err.message, false);
     chatHistory.pop();
@@ -709,6 +1043,7 @@ function updateChatMessage(id, content, withCursor) {
 
 function clearChat() {
   chatHistory = [];
+  localStorage.removeItem('chat_history');
   document.getElementById('chatMessages').innerHTML =
     '<div class="flex gap-3">' +
       '<div class="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-sm flex-shrink-0 mt-0.5">🧠</div>' +
@@ -731,6 +1066,209 @@ function autoResize(el) {
 }
 
 // ============================================
+// CONVERSATION HISTORY (localStorage)
+// ============================================
+function saveChatHistory() {
+  try {
+    localStorage.setItem('chat_history', JSON.stringify(chatHistory.slice(-50)));
+  } catch (e) { console.warn('Could not save chat history:', e); }
+}
+
+function loadChatHistory() {
+  try {
+    const saved = localStorage.getItem('chat_history');
+    if (!saved) return;
+    const msgs = JSON.parse(saved);
+    if (!Array.isArray(msgs) || msgs.length === 0) return;
+    chatHistory = msgs;
+    const container = document.getElementById('chatMessages');
+    container.innerHTML =
+      '<div class="text-center text-xs text-gray-600 py-2 select-none">— previous session restored —</div>';
+    msgs.forEach(msg => {
+      const id = appendChatMessage(msg.role === 'user' ? 'user' : 'ai', msg.role === 'user' ? msg.content : '');
+      if (msg.role !== 'user') updateChatMessage(id, msg.content, false);
+    });
+  } catch (e) {
+    chatHistory = [];
+    localStorage.removeItem('chat_history');
+  }
+}
+
+// ============================================
+// CHAT AGENTS (slash commands)
+// ============================================
+const CHAT_COMMANDS = {
+  '/summarize': { label: '📋 Summarize',   hint: 'Summarize pasted text inline'         },
+  '/flashcard': { label: '📚 Flashcards',  hint: 'Generate flashcards from text'        },
+  '/quiz':      { label: '📝 Quiz',         hint: 'Create a quiz from text'              },
+  '/studyplan': { label: '📅 Study Plan',   hint: 'Build a study plan for a topic'      },
+};
+
+function insertChatCmd(cmd) {
+  const input = document.getElementById('chatInput');
+  input.value = cmd;
+  input.focus();
+  autoResize(input);
+  document.getElementById('cmdPopup').classList.add('hidden');
+}
+
+function handleChatInput(val) {
+  const popup = document.getElementById('cmdPopup');
+  if (!popup) return;
+  if (val.startsWith('/')) {
+    const partial = val.toLowerCase().split(/\s/)[0];
+    const matches = Object.entries(CHAT_COMMANDS).filter(([cmd]) => cmd.startsWith(partial));
+    if (matches.length && val.trim() === partial) {
+      popup.innerHTML = matches.map(([cmd, cfg]) =>
+        '<button class="w-full text-left px-4 py-2.5 hover:bg-gray-700 transition-colors text-sm flex items-center gap-3 border-b border-gray-700/50 last:border-0" onclick="insertChatCmd(\'' + cmd + ' \')">' +
+          '<span class="font-mono text-purple-400">' + cmd + '</span>' +
+          '<span class="text-gray-500 text-xs">' + cfg.hint + '</span>' +
+        '</button>'
+      ).join('');
+      popup.classList.remove('hidden');
+      return;
+    }
+  }
+  popup.classList.add('hidden');
+}
+
+// Helper: lock/unlock UI during agent run
+function _agentStart() {
+  isGenerating = true;
+  document.getElementById('sendBtn').disabled = true;
+  document.getElementById('cmdPopup').classList.add('hidden');
+}
+function _agentEnd() {
+  isGenerating = false;
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('chatInput').focus();
+}
+
+async function _runInlineAgent(userLabel, systemPrompt, userPrompt) {
+  appendChatMessage('user', userLabel);
+  chatHistory.push({ role: 'user', content: userLabel });
+  const msgId = appendChatMessage('ai', '');
+  _agentStart();
+  try {
+    let finalText = '';
+    await callAI([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ], (chunk) => {
+      finalText = chunk;
+      updateChatMessage(msgId, chunk, true);
+    });
+    updateChatMessage(msgId, finalText, false);
+    chatHistory.push({ role: 'assistant', content: finalText });
+    saveChatHistory();
+  } catch (err) {
+    updateChatMessage(msgId, '**Error:** ' + err.message, false);
+  }
+  _agentEnd();
+}
+
+async function chatAgentSummarize(text) {
+  if (!text) { showToast('Paste text after /summarize', 'error'); return; }
+  await _runInlineAgent(
+    '📋 /summarize [text]',
+    'You are a study assistant. Create a clear, well-structured summary using markdown headings and bullet points.',
+    'Summarize this text with key points, main ideas, and important details:\n\n' + text
+  );
+}
+
+async function chatAgentStudyplan(text) {
+  if (!text) { showToast('Add a topic after /studyplan', 'error'); return; }
+  await _runInlineAgent(
+    '📅 /studyplan ' + text.slice(0, 50),
+    'You are an expert educational coach. Create detailed, practical, motivating study plans using markdown.',
+    'Create a comprehensive study plan for: ' + text
+  );
+}
+
+async function chatAgentFlashcard(text) {
+  if (!text) { showToast('Paste text after /flashcard', 'error'); return; }
+  appendChatMessage('user', '📚 /flashcard [text]');
+  chatHistory.push({ role: 'user', content: '📚 /flashcard [text]' });
+  const msgId = appendChatMessage('ai', '');
+  _agentStart();
+  try {
+    updateChatMessage(msgId, '⏳ Generating flashcards…', true);
+    const count = 8;
+    const response = await callAI([
+      { role: 'system', content: 'You are a study assistant. Respond with valid JSON only — no markdown, no code fences.' },
+      { role: 'user', content: 'Create exactly ' + count + ' flashcards from the text below.\nReturn ONLY a valid JSON array.\nFormat: [{"front":"term or question","back":"definition or answer"}]\n\nText:\n' + text }
+    ]);
+    const cards = parseJSON(response);
+    if (!Array.isArray(cards) || !cards.length) throw new Error('Invalid flashcard data');
+    flashcards = cards;
+    currentFlashcardIndex = 0;
+    isFlipped = false;
+    document.getElementById('flashcard-input-section').classList.add('hidden');
+    document.getElementById('flashcard-display-section').classList.remove('hidden');
+    renderFlashcard();
+    renderFlashcardDots();
+    const preview = cards.slice(0, 3).map(c => '- **' + escapeHtml(c.front) + '**').join('\n');
+    const fcMsg = '✅ **' + cards.length + ' flashcards created!**\n\n' + preview +
+      (cards.length > 3 ? '\n_…and ' + (cards.length - 3) + ' more_' : '') +
+      '\n\n[→ Open Flashcards panel to study them](#fc)';
+    chatHistory.push({ role: 'assistant', content: fcMsg });
+    saveChatHistory();
+    updateChatMessage(msgId, fcMsg, false);
+    setTimeout(() => {
+      const el = document.getElementById(msgId);
+      if (el) {
+        const a = el.querySelector('a[href="#fc"]');
+        if (a) { a.href = '#'; a.onclick = (e) => { e.preventDefault(); showPanel('flashcards'); }; }
+      }
+    }, 100);
+    setTimeout(() => showPanel('flashcards'), 1400);
+  } catch (err) {
+    updateChatMessage(msgId, '**Error:** ' + err.message, false);
+  }
+  _agentEnd();
+}
+
+async function chatAgentQuiz(text) {
+  if (!text) { showToast('Paste text after /quiz', 'error'); return; }
+  appendChatMessage('user', '📝 /quiz [text]');
+  chatHistory.push({ role: 'user', content: '📝 /quiz [text]' });
+  const msgId = appendChatMessage('ai', '');
+  _agentStart();
+  try {
+    updateChatMessage(msgId, '⏳ Generating quiz…', true);
+    const response = await callAI([
+      { role: 'system', content: 'You are a quiz generator. Respond with valid JSON only — no markdown, no code fences.' },
+      { role: 'user', content: 'Create exactly 5 multiple-choice quiz questions at medium difficulty.\nReturn ONLY a valid JSON array.\nFormat: [{"question":"...","options":["A","B","C","D"],"correct":0,"explanation":"why A is correct"}]\n\nText:\n' + text }
+    ]);
+    const quiz = parseJSON(response);
+    if (!Array.isArray(quiz) || !quiz.length) throw new Error('Invalid quiz data');
+    quizData = quiz;
+    quizAnswers = {};
+    document.getElementById('quiz-input-section').classList.add('hidden');
+    document.getElementById('quiz-display-section').classList.remove('hidden');
+    document.getElementById('quizResult').classList.add('hidden');
+    renderQuiz();
+    const qzMsg = '✅ **' + quiz.length + ' quiz questions ready!**\n\n' +
+      '_Q1: ' + escapeHtml(quiz[0].question.slice(0, 90)) + (quiz[0].question.length > 90 ? '…' : '') + '_\n\n' +
+      '[→ Open Quiz panel to take the quiz](#qz)';
+    chatHistory.push({ role: 'assistant', content: qzMsg });
+    saveChatHistory();
+    updateChatMessage(msgId, qzMsg, false);
+    setTimeout(() => {
+      const el = document.getElementById(msgId);
+      if (el) {
+        const a = el.querySelector('a[href="#qz"]');
+        if (a) { a.href = '#'; a.onclick = (e) => { e.preventDefault(); showPanel('quiz'); }; }
+      }
+    }, 100);
+    setTimeout(() => showPanel('quiz'), 1400);
+  } catch (err) {
+    updateChatMessage(msgId, '**Error:** ' + err.message, false);
+  }
+  _agentEnd();
+}
+
+// ============================================
 // FLASHCARDS
 // ============================================
 async function generateFlashcards() {
@@ -750,7 +1288,7 @@ async function generateFlashcards() {
     'Text:\n' + text;
 
   try {
-    const response = await callGroq([
+    const response = await callAI([
       { role: 'system', content: 'You are a study assistant. Respond with valid JSON only — no markdown, no code fences, no extra text whatsoever.' },
       { role: 'user', content: prompt }
     ]);
@@ -871,7 +1409,7 @@ async function generateQuiz() {
     'Text:\n' + text;
 
   try {
-    const response = await callGroq([
+    const response = await callAI([
       { role: 'system', content: 'You are a quiz generator. Respond with valid JSON only — no markdown, no code fences, no extra text.' },
       { role: 'user', content: prompt }
     ]);
@@ -1012,7 +1550,7 @@ async function summarizeText() {
   resultEl.innerHTML = '<span class="typing-cursor">▋</span>';
 
   try {
-    await callGroq([
+    await callAI([
       { role: 'system', content: 'You are a study assistant that creates excellent summaries. Use markdown formatting.' },
       { role: 'user', content: formatPrompts[format] + '\n\nText:\n' + text }
     ], (chunk) => {
@@ -1072,7 +1610,7 @@ async function generateStudyPlan() {
   resultEl.innerHTML = '<span class="typing-cursor">▋</span>';
 
   try {
-    await callGroq([
+    await callAI([
       { role: 'system', content: 'You are an expert educational coach. Create detailed, practical, motivating study plans.' },
       { role: 'user', content: prompt }
     ], (chunk) => {

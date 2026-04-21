@@ -66,66 +66,60 @@
     </div>
   </div>
 
-  <!-- Settings Modal (optional — app works without touching this) -->
-  <div id="apiModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center" onclick="if(event.target===this) closeSettingsModal()">
-    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
-      <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-3">
-          <span class="text-2xl">⚙️</span>
-          <div>
-            <h2 class="text-xl font-bold text-white">API Key Settings</h2>
-            <p class="text-gray-500 text-xs">Powered by Groq</p>
-          </div>
+  <!-- Settings Modal -->
+  <div id="apiModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onclick="if(event.target===this) closeSettingsModal()">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col">
+      <!-- Header -->
+      <div class="flex items-center justify-between p-6 pb-4 flex-shrink-0">
+        <div>
+          <h2 class="text-xl font-bold text-white">⚙️ API Settings</h2>
+          <p class="text-gray-500 text-xs mt-0.5">Your own key = private rate limits</p>
         </div>
         <button onclick="closeSettingsModal()" class="text-gray-500 hover:text-gray-300 text-xl leading-none transition-colors">✕</button>
       </div>
 
-      <div class="bg-green-900/20 border border-green-800/50 rounded-xl p-4 mb-5">
-        <p class="text-green-400 text-sm font-medium mb-1">✓ Default key is active — no setup needed</p>
-        <p class="text-gray-400 text-xs leading-relaxed">Use your own free key for private rate limits.</p>
+      <!-- Provider tabs -->
+      <div class="px-6 flex-shrink-0">
+        <div class="flex gap-1 bg-gray-800 rounded-xl p-1 mb-4">
+          <button onclick="setModalProvider('groq')" id="tab-groq"
+            class="provider-tab flex-1 py-2 rounded-lg text-xs font-semibold transition-all bg-purple-600 text-white">⚡ Groq</button>
+          <button onclick="setModalProvider('openrouter')" id="tab-openrouter"
+            class="provider-tab flex-1 py-2 rounded-lg text-xs font-semibold transition-all text-gray-400 hover:text-white">🌐 OpenRouter</button>
+          <button onclick="setModalProvider('cerebras')" id="tab-cerebras"
+            class="provider-tab flex-1 py-2 rounded-lg text-xs font-semibold transition-all text-gray-400 hover:text-white">🧠 Cerebras</button>
+          <button onclick="setModalProvider('gemini')" id="tab-gemini"
+            class="provider-tab flex-1 py-2 rounded-lg text-xs font-semibold transition-all text-gray-400 hover:text-white">✨ Gemini</button>
+        </div>
       </div>
 
-      <!-- How to get a key -->
-      <details class="mb-4 group">
-        <summary class="cursor-pointer text-sm text-purple-400 hover:text-purple-300 font-medium select-none list-none flex items-center gap-2">
-          <span class="transition-transform group-open:rotate-90 inline-block">▶</span>
-          How to get a free Groq API key
-        </summary>
-        <div class="mt-3 space-y-2 pl-4 border-l border-gray-700">
-          <div class="flex gap-3 items-start">
-            <span class="bg-purple-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
-            <p class="text-gray-400 text-xs leading-relaxed">Go to <a href="https://console.groq.com" target="_blank" class="text-purple-400 underline">console.groq.com</a> and sign up (free, no credit card)</p>
-          </div>
-          <div class="flex gap-3 items-start">
-            <span class="bg-purple-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
-            <p class="text-gray-400 text-xs leading-relaxed">Click <strong class="text-gray-300">API Keys</strong> in the left sidebar</p>
-          </div>
-          <div class="flex gap-3 items-start">
-            <span class="bg-purple-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-            <p class="text-gray-400 text-xs leading-relaxed">Click <strong class="text-gray-300">Create API Key</strong>, give it any name</p>
-          </div>
-          <div class="flex gap-3 items-start">
-            <span class="bg-purple-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
-            <p class="text-gray-400 text-xs leading-relaxed">Copy the key (starts with <code class="bg-gray-800 px-1 rounded text-purple-300">gsk_</code>) and paste it below</p>
-          </div>
-        </div>
-      </details>
+      <!-- Scrollable body -->
+      <div class="overflow-y-auto px-6 pb-6 space-y-4 flex-1">
 
-      <div class="space-y-3">
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Your Groq API Key (optional)</label>
-          <input id="apiKeyInput" type="password" placeholder="gsk_ ... paste your key here"
-            class="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 text-sm"
-            onkeydown="if(event.key==='Enter') saveApiKey()">
+        <!-- Free key notice (Groq / Gemini / Cerebras) -->
+        <div id="modalFreeKeyNotice" class="bg-green-900/20 border border-green-800/50 rounded-xl p-3">
+          <p class="text-green-400 text-sm font-medium mb-0.5">✓ Shared default key active — works right away</p>
+          <p class="text-gray-400 text-xs">Add your own free key below for private rate limits.</p>
         </div>
-        <button onclick="saveApiKey()"
-          class="w-full bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
-          Save My Key
+
+        <!-- How-to steps (populated by refreshSettingsModal) -->
+        <div id="modalHowTo" class="space-y-2"></div>
+
+        <!-- Key input -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2" id="modalKeyLabel">Groq API Key (optional)</label>
+          <input id="apiKeyInput" type="password" placeholder="gsk_..."
+            class="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 font-mono text-sm"
+            onkeydown="if(event.key==='Enter') saveProviderKeyModal()">
+        </div>
+        <button onclick="saveProviderKeyModal()"
+          class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
+          Save Key &amp; Switch to This Provider
         </button>
-        <button onclick="useDefaultKey()"
-          class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium py-2.5 rounded-xl transition-colors text-sm border border-gray-700">
-          ↩ Reset to Default Key
+        <button id="modalResetBtn" onclick="resetProviderKeyModal()"
+          class="hidden w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium py-2.5 rounded-xl transition-colors text-sm border border-gray-700">
+          ↩ Remove My Key
         </button>
+        <p class="text-xs text-center text-gray-500" id="modalSignupLink"></p>
       </div>
     </div>
   </div>
@@ -167,11 +161,20 @@
 
     <div class="p-4 border-t border-gray-800 space-y-3">
       <div>
+        <label class="text-xs text-gray-500 mb-1 block font-medium uppercase tracking-wider">Provider</label>
+        <select id="providerSelect" onchange="changeProvider(this.value)"
+          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
+          <option value="groq">⚡ Groq</option>
+          <option value="openrouter">🌐 OpenRouter</option>
+          <option value="cerebras">🧠 Cerebras</option>
+          <option value="gemini">✨ Gemini</option>
+        </select>
+      </div>
+      <div>
         <label class="text-xs text-gray-500 mb-1 block font-medium uppercase tracking-wider">Model</label>
-        <select id="modelSelect"
+        <select id="modelSelect" onchange="saveModelChoice()"
           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
           <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fastest)</option>
-          <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Best)</option>
         </select>
       </div>
       <div>
@@ -226,18 +229,29 @@
       </div>
 
       <div class="p-5 border-t border-gray-800 flex-shrink-0">
-        <div class="flex gap-3 max-w-4xl mx-auto">
-          <textarea id="chatInput" placeholder="Ask a question, explain a concept, paste your notes..."
-            rows="1"
-            class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none text-sm"
-            onkeydown="handleChatKeydown(event)"
-            oninput="autoResize(this)"></textarea>
-          <button onclick="sendChatMessage()" id="sendBtn"
-            class="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-medium transition-colors text-sm flex-shrink-0">
-            Send
-          </button>
+        <!-- Quick-action chips -->
+        <div class="flex gap-2 max-w-4xl mx-auto mb-3 flex-wrap">
+          <button onclick="insertChatCmd('/summarize ')" class="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-full text-gray-400 hover:text-gray-200 transition-colors">📋 /summarize</button>
+          <button onclick="insertChatCmd('/flashcard ')" class="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-full text-gray-400 hover:text-gray-200 transition-colors">📚 /flashcard</button>
+          <button onclick="insertChatCmd('/quiz ')"      class="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-full text-gray-400 hover:text-gray-200 transition-colors">📝 /quiz</button>
+          <button onclick="insertChatCmd('/studyplan ')" class="text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-full text-gray-400 hover:text-gray-200 transition-colors">📅 /studyplan</button>
         </div>
-        <p class="text-center text-xs text-gray-600 mt-2">Enter to send · Shift+Enter for new line</p>
+        <!-- Slash command popup -->
+        <div class="relative max-w-4xl mx-auto">
+          <div id="cmdPopup" class="hidden absolute bottom-full mb-2 left-0 w-full bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden z-10"></div>
+          <div class="flex gap-3">
+            <textarea id="chatInput" placeholder="Ask anything, or type / for commands…"
+              rows="1"
+              class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none text-sm"
+              onkeydown="handleChatKeydown(event)"
+              oninput="autoResize(this); handleChatInput(this.value)"></textarea>
+            <button onclick="sendChatMessage()" id="sendBtn"
+              class="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-medium transition-colors text-sm flex-shrink-0">
+              Send
+            </button>
+          </div>
+          <p class="text-center text-xs text-gray-600 mt-2">Enter to send · Shift+Enter for new line · type / for AI tools</p>
+        </div>
       </div>
     </div>
 
@@ -551,15 +565,42 @@
       <!-- Firebase status -->
       <div id="adminFbStatus" class="bg-gray-900 border border-gray-700 rounded-2xl p-4 text-sm"></div>
 
+      <!-- Admin URL / Password reveal -->
+      <div class="bg-gray-900 border border-yellow-900/50 rounded-2xl p-5 space-y-2">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-yellow-400 uppercase tracking-wide">🔗 Admin Access URL</h2>
+          <button id="platoRevealBtn" onclick="togglePlatoReveal()"
+            class="text-gray-500 hover:text-gray-300 text-xs px-3 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors">👁 Reveal</button>
+        </div>
+        <div class="font-mono text-xs bg-gray-800 rounded-xl px-4 py-3 text-gray-400 break-all select-all" id="adminUrlDisplay">
+          <span id="adminUrlBase">https://pt0407.github.io/study-ai/?admin=</span><span id="adminUrlPassword" class="blur-sm select-none transition-all duration-200">PLATO</span>
+        </div>
+        <button onclick="copyAdminUrl()" class="text-xs text-gray-500 hover:text-gray-300 transition-colors">📋 Copy full URL</button>
+      </div>
+
       <!-- API Key Manager -->
       <div class="bg-gray-900 border border-blue-900/50 rounded-2xl p-6 space-y-4">
         <div>
           <h2 class="text-lg font-semibold text-white">🗝️ API Key Manager</h2>
-          <p class="text-gray-500 text-sm">Keys saved here are used automatically by all users — no code editing needed.</p>
+          <p class="text-gray-500 text-sm">Keys saved here are used as shared defaults for all users — no code editing needed.</p>
         </div>
+        <!-- Provider selector -->
+        <div class="flex gap-1 bg-gray-800 rounded-xl p-1">
+          <button onclick="document.getElementById('adminKeyProviderSelect').value='groq'; adminLoadKeys()"
+            class="flex-1 py-1.5 rounded-lg text-xs font-semibold text-gray-400 hover:text-white transition-colors" id="adminProvTab-groq">⚡ Groq</button>
+          <button onclick="document.getElementById('adminKeyProviderSelect').value='gemini'; adminLoadKeys()"
+            class="flex-1 py-1.5 rounded-lg text-xs font-semibold text-gray-400 hover:text-white transition-colors" id="adminProvTab-gemini">✨ Gemini</button>
+          <button onclick="document.getElementById('adminKeyProviderSelect').value='cerebras'; adminLoadKeys()"
+            class="flex-1 py-1.5 rounded-lg text-xs font-semibold text-gray-400 hover:text-white transition-colors" id="adminProvTab-cerebras">🧠 Cerebras</button>
+        </div>
+        <select id="adminKeyProviderSelect" class="hidden">
+          <option value="groq">groq</option>
+          <option value="gemini">gemini</option>
+          <option value="cerebras">cerebras</option>
+        </select>
         <div id="adminKeysList" class="space-y-2 min-h-[2rem]"></div>
         <div class="flex gap-3 pt-1">
-          <input id="adminNewKeyInput" type="text" placeholder="gsk_... (raw key from friend)"
+          <input id="adminNewKeyInput" type="text" placeholder="Paste raw key (gsk_ / AIza / csk-)…"
             class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 font-mono text-sm focus:outline-none focus:border-blue-500"
             onkeydown="if(event.key==='Enter') adminAddKey()">
           <button onclick="adminAddKey()" id="adminAddKeyBtn"
@@ -619,29 +660,37 @@
       <div id="adminCodesOutput" class="hidden bg-gray-900 border border-gray-700 rounded-2xl p-6 space-y-3">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold text-white">Generated Codes</h2>
-          <button onclick="adminCopyCodes()"
-            class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-xl text-sm transition-colors">
-            📋 Copy All
-          </button>
+          <div class="flex gap-2">
+            <button id="genCodesRevealBtn" onclick="toggleGenCodesReveal()"
+              class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-xl text-sm transition-colors">👁 Reveal</button>
+            <button onclick="adminCopyCodes()"
+              class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-xl text-sm transition-colors">
+              📋 Copy All
+            </button>
+          </div>
         </div>
         <p class="text-gray-500 text-xs">Send one code per customer. Each code works on one device only.</p>
-        <div id="adminCodesList" class="bg-gray-800 rounded-xl p-4 font-mono text-sm text-green-400 max-h-72 overflow-y-auto space-y-1"></div>
+        <div id="adminCodesList" class="bg-gray-800 rounded-xl p-4 font-mono text-sm text-green-400 max-h-72 overflow-y-auto space-y-1 blur-sm transition-all duration-200"></div>
       </div>
 
       <!-- View all codes -->
       <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 space-y-4">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold text-white">All Codes</h2>
-          <button onclick="adminLoadCodes()" id="adminLoadBtn"
-            class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 px-4 py-2 rounded-xl text-sm transition-colors">
-            Refresh
-          </button>
+          <div class="flex gap-2">
+            <button id="allCodesRevealBtn" onclick="toggleAllCodesReveal()"
+              class="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-xl text-sm transition-colors">👁 Reveal</button>
+            <button onclick="adminLoadCodes()" id="adminLoadBtn"
+              class="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 px-4 py-2 rounded-xl text-sm transition-colors">
+              Refresh
+            </button>
+          </div>
         </div>
         <div id="adminAllCodes" class="hidden">
           <div class="flex gap-6 text-xs text-gray-600 mb-2 px-1 uppercase tracking-wide">
             <span class="w-44">Code</span><span class="w-24">Status</span><span>Used At</span>
           </div>
-          <div id="adminAllCodesList" class="bg-gray-800 rounded-xl p-4 font-mono text-xs max-h-72 overflow-y-auto space-y-2"></div>
+          <div id="adminAllCodesList" class="bg-gray-800 rounded-xl p-4 font-mono text-xs max-h-72 overflow-y-auto space-y-2 blur-sm transition-all duration-200"></div>
         </div>
       </div>
 
