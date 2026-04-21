@@ -1160,10 +1160,11 @@ async function sendChatMessage() {
     const body = message.slice(cmdMatch.length).trim();
     input.value = '';
     input.style.height = 'auto';
-    if (cmdMatch === '/summarize') return chatAgentSummarize(body);
-    if (cmdMatch === '/flashcard') return chatAgentFlashcard(body);
-    if (cmdMatch === '/quiz')      return chatAgentQuiz(body);
-    if (cmdMatch === '/studyplan') return chatAgentStudyplan(body);
+    if (cmdMatch === '/summarize')  return chatAgentSummarize(body);
+    if (cmdMatch === '/flashcard')  return chatAgentFlashcard(body);
+    if (cmdMatch === '/quiz')       return chatAgentQuiz(body);
+    if (cmdMatch === '/studyplan')  return chatAgentStudyplan(body);
+    if (cmdMatch === '/resetcache') return chatAgentResetCache();
   }
 
   input.value = '';
@@ -1305,10 +1306,11 @@ function loadChatHistory() {
 // CHAT AGENTS (slash commands)
 // ============================================
 const CHAT_COMMANDS = {
-  '/summarize': { label: '📋 Summarize',   hint: 'Summarize pasted text inline'         },
-  '/flashcard': { label: '📚 Flashcards',  hint: 'Generate flashcards from text'        },
-  '/quiz':      { label: '📝 Quiz',         hint: 'Create a quiz from text'              },
-  '/studyplan': { label: '📅 Study Plan',   hint: 'Build a study plan for a topic'      },
+  '/summarize':   { label: '📋 Summarize',      hint: 'Summarize pasted text inline'         },
+  '/flashcard':   { label: '📚 Flashcards',     hint: 'Generate flashcards from text'        },
+  '/quiz':        { label: '📝 Quiz',            hint: 'Create a quiz from text'              },
+  '/studyplan':   { label: '📅 Study Plan',      hint: 'Build a study plan for a topic'      },
+  '/resetcache':  { label: '🗑️ Reset Cache',    hint: 'Clear AI response cache (stay logged in)' },
 };
 
 function insertChatCmd(cmd) {
@@ -1381,6 +1383,17 @@ async function chatAgentSummarize(text) {
     'You are a study assistant. Create a clear, well-structured summary using markdown headings and bullet points.',
     'Summarize this text with key points, main ideas, and important details:\n\n' + text
   );
+}
+
+function chatAgentResetCache() {
+  const raw = localStorage.getItem(_CACHE_LS);
+  let count = 0;
+  try { count = Object.keys(JSON.parse(raw || '{}')).length; } catch {}
+  localStorage.removeItem(_CACHE_LS);
+  const msg = '🗑️ **Response cache cleared** — ' + count + ' cached entr' + (count === 1 ? 'y' : 'ies') + ' removed.\n\nYour login, API keys, and chat history are untouched. Next AI call will fetch fresh from the API.';
+  appendChatMessage('user', '/resetcache');
+  appendChatMessage('ai', msg);
+  showToast('Cache cleared (' + count + ' entries)', 'success');
 }
 
 async function chatAgentStudyplan(text) {
